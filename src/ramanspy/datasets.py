@@ -348,7 +348,7 @@ def MDA_MB_231_cells(dataset="train", folder=None) -> Tuple[core.SpectralContain
 
     Data from `Horgan, C.C. et al. (2021) <https://pubs.acs.org/doi/full/10.1021/acs.analchem.1c02178>`_.
 
-    Must be downloaded first. Provided by authors on `Google Drive <https://drive.google.com/drive/folders/1590Zqr56txK5_hVlrfe7oEIdcKoUTEIH>`_.
+    Must be downloaded first. Provided by authors on `OneDrive <https://emckclac-my.sharepoint.com/personal/k1919691_kcl_ac_uk/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fk1919691%5Fkcl%5Fac%5Fuk%2FDocuments%2FDeepeR%2FRaman%20Spectral%20Denoising%2FDataset&fromShare=true&ga=1>`_.
 
     All data has spectral dimensionality of 500, in the range (500, 1800) cm:sup:`-1`.
 
