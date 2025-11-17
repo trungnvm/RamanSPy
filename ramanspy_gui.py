@@ -552,6 +552,12 @@ elif page == "Phân tích":
 
         if st.button("▶️ Chạy Unmixing", type="primary"):
             try:
+                # Kiểm tra nếu là Spectrum đơn lẻ
+                data_type = type(data_to_analyze).__name__
+                if data_type == 'Spectrum':
+                    st.warning("⚠️ Spectral Unmixing thường được sử dụng cho dữ liệu ảnh/volumetric với nhiều phổ.")
+                    st.info("💡 Với 1 phổ đơn lẻ, bạn có thể sử dụng Peak Detection thay vì Unmixing.")
+
                 with st.spinner("Đang phân tích..."):
                     unmixer = rp.analysis.unmix.NFINDR(n_endmembers=n_endmembers)
                     abundance_maps, endmembers = unmixer.apply(data_to_analyze)
@@ -586,10 +592,17 @@ elif page == "Phân tích":
                 from scipy.signal import find_peaks
 
                 with st.spinner("Đang tìm peaks..."):
-                    # Lấy phổ đầu tiên để phân tích
-                    if hasattr(data_to_analyze, 'flat'):
+                    # Lấy phổ để phân tích
+                    data_type = type(data_to_analyze).__name__
+
+                    if data_type == 'Spectrum':
+                        # Spectrum đơn lẻ
+                        spectrum = data_to_analyze
+                    elif hasattr(data_to_analyze, 'flat'):
+                        # Volumetric data
                         spectrum = data_to_analyze.flat[0]
-                    elif hasattr(data_to_analyze, '__getitem__'):
+                    elif hasattr(data_to_analyze, '__len__') and len(data_to_analyze.shape) > 1:
+                        # Multi-spectrum data
                         spectrum = data_to_analyze[0]
                     else:
                         spectrum = data_to_analyze
@@ -623,7 +636,15 @@ elif page == "Phân tích":
 
                 with st.spinner("Đang phân tích PCA..."):
                     # Chuẩn bị dữ liệu
-                    if hasattr(data_to_analyze, 'flat'):
+                    data_type = type(data_to_analyze).__name__
+
+                    if data_type == 'Spectrum':
+                        # Spectrum đơn lẻ - PCA cần ít nhất 2 mẫu
+                        st.error("❌ PCA cần ít nhất 2 phổ. Dữ liệu hiện tại chỉ có 1 phổ đơn lẻ.")
+                        st.info("💡 Sử dụng dữ liệu tổng hợp hoặc tải nhiều phổ để chạy PCA.")
+                        st.stop()
+                    elif hasattr(data_to_analyze, 'flat'):
+                        # Volumetric data
                         data_matrix = data_to_analyze.flat.spectral_data
                     else:
                         data_matrix = data_to_analyze.spectral_data if hasattr(data_to_analyze, 'spectral_data') else data_to_analyze
@@ -632,6 +653,10 @@ elif page == "Phân tích":
                     if len(data_matrix.shape) > 2:
                         original_shape = data_matrix.shape
                         data_matrix = data_matrix.reshape(-1, data_matrix.shape[-1])
+                    elif len(data_matrix.shape) == 1:
+                        # Nếu chỉ có 1 phổ, không thể chạy PCA
+                        st.error("❌ PCA cần ít nhất 2 phổ để phân tích.")
+                        st.stop()
 
                     # Chạy PCA
                     pca = PCA(n_components=n_components)
