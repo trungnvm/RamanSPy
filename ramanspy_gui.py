@@ -83,15 +83,36 @@ if page == "Tải dữ liệu":
         with col1:
             file_format = st.selectbox(
                 "Chọn định dạng file:",
-                ["WITec", "Renishaw", "CSV/Text", "NumPy (.npy)"]
+                ["CSV/Text (tùy chỉnh)", "WITec", "Renishaw", "NumPy (.npy)"]
             )
 
         with col2:
             st.info("💡 Chọn đúng định dạng của thiết bị đo")
 
+        # Hướng dẫn cho CSV/Text
+        if file_format == "CSV/Text (tùy chỉnh)":
+            with st.expander("ℹ️ Định dạng CSV/Text được hỗ trợ"):
+                st.write("""
+                **Định dạng file được hỗ trợ:**
+                - Header (tùy chọn) với metadata
+                - Dữ liệu 2 cột: Wavenumber và Intensity
+                - Phân cách bằng: `;` , `,` , tab hoặc khoảng trắng
+
+                **Ví dụ:**
+                ```
+                Name=Andor Spectra
+                X=Raman Shift, 1/cm
+                Y=Intensity, Counts
+                2.37; 2405
+                6.04; 2446
+                9.70; 2369
+                ...
+                ```
+                """)
+
         uploaded_file = st.file_uploader(
             "Chọn file dữ liệu:",
-            type=['txt', 'csv', 'wdf', 'npy', 'npz'],
+            type=['txt', 'csv', 'wdf', 'npy', 'npz', 'dat'],
             help="Hỗ trợ nhiều định dạng file từ các thiết bị Raman khác nhau"
         )
 
@@ -112,9 +133,53 @@ if page == "Tải dữ liệu":
                         data_array = np.load(tmp_path)
                         st.session_state.data = rp.Spectrum(data_array)
                     else:
-                        # CSV/Text
-                        data_array = np.loadtxt(tmp_path)
-                        st.session_state.data = rp.Spectrum(data_array)
+                        # CSV/Text (tùy chỉnh)
+                        # Đọc file và xử lý
+                        with open(tmp_path, 'r', encoding='utf-8') as f:
+                            lines = f.readlines()
+
+                        # Tìm dòng bắt đầu dữ liệu (bỏ qua header)
+                        data_start = 0
+                        for i, line in enumerate(lines):
+                            # Kiểm tra nếu dòng chứa số (dữ liệu)
+                            if line.strip() and (line.strip()[0].isdigit() or line.strip()[0] == '-'):
+                                data_start = i
+                                break
+
+                        # Parse dữ liệu
+                        wavenumbers = []
+                        intensities = []
+
+                        for line in lines[data_start:]:
+                            line = line.strip()
+                            if not line:
+                                continue
+
+                            # Thử các delimiter khác nhau
+                            if ';' in line:
+                                parts = line.split(';')
+                            elif ',' in line:
+                                parts = line.split(',')
+                            elif '\t' in line:
+                                parts = line.split('\t')
+                            else:
+                                parts = line.split()
+
+                            if len(parts) >= 2:
+                                try:
+                                    wavenumbers.append(float(parts[0].strip()))
+                                    intensities.append(float(parts[1].strip()))
+                                except ValueError:
+                                    continue
+
+                        # Tạo Spectrum object
+                        if len(wavenumbers) > 0 and len(intensities) > 0:
+                            st.session_state.data = rp.Spectrum(
+                                np.array(intensities),
+                                spectral_axis=np.array(wavenumbers)
+                            )
+                        else:
+                            raise ValueError("Không thể đọc dữ liệu từ file. Vui lòng kiểm tra định dạng.")
 
                 os.unlink(tmp_path)
                 st.success(f"✅ Đã tải thành công: {uploaded_file.name}")
