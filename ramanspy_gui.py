@@ -530,6 +530,9 @@ elif page == "Phân tích":
     if st.session_state.preprocessed_data is None:
         st.info("💡 Đang sử dụng dữ liệu gốc. Khuyến nghị tiền xử lý dữ liệu trước khi phân tích.")
 
+    # Debug info
+    st.write(f"**Loại dữ liệu phân tích:** {type(data_to_analyze).__name__}")
+
     st.write("### Chọn phương pháp phân tích")
 
     analysis_method = st.selectbox(
@@ -554,9 +557,19 @@ elif page == "Phân tích":
             try:
                 # Kiểm tra nếu là Spectrum đơn lẻ
                 data_type = type(data_to_analyze).__name__
+
+                # Kiểm tra shape để xác định có phải single spectrum không
                 if data_type == 'Spectrum':
-                    st.warning("⚠️ Spectral Unmixing thường được sử dụng cho dữ liệu ảnh/volumetric với nhiều phổ.")
-                    st.info("💡 Với 1 phổ đơn lẻ, bạn có thể sử dụng Peak Detection thay vì Unmixing.")
+                    if hasattr(data_to_analyze, 'spectral_data'):
+                        data_shape = data_to_analyze.spectral_data.shape
+                    else:
+                        data_shape = data_to_analyze.shape if hasattr(data_to_analyze, 'shape') else (1,)
+
+                    # Nếu là 1D hoặc shape[0] == 1, là single spectrum
+                    if len(data_shape) == 1 or (len(data_shape) > 1 and data_shape[0] == 1):
+                        st.error("❌ Spectral Unmixing cần nhiều phổ (ảnh hoặc volumetric data).")
+                        st.info("💡 Với 1 phổ đơn lẻ, sử dụng Peak Detection thay vì Unmixing.")
+                        st.stop()
 
                 with st.spinner("Đang phân tích..."):
                     unmixer = rp.analysis.unmix.NFINDR(n_endmembers=n_endmembers)
@@ -607,15 +620,38 @@ elif page == "Phân tích":
                     else:
                         spectrum = data_to_analyze
 
+                    # Lấy intensities một cách an toàn
+                    if hasattr(spectrum, 'spectral_data'):
+                        intensities = spectrum.spectral_data
+                    elif hasattr(spectrum, 'flat'):
+                        intensities = spectrum.flat
+                    elif isinstance(spectrum, np.ndarray):
+                        intensities = spectrum
+                    else:
+                        # Fallback: chuyển về numpy array
+                        intensities = np.array(spectrum)
+
+                    # Đảm bảo là 1D array
+                    if len(intensities.shape) > 1:
+                        intensities = intensities.flatten()
+
                     # Tìm peaks
-                    intensities = spectrum.spectral_data if hasattr(spectrum, 'spectral_data') else spectrum
                     peaks, properties = find_peaks(intensities, prominence=prominence, distance=distance)
+
+                    # Lấy spectral axis an toàn
+                    if hasattr(spectrum, 'spectral_axis'):
+                        spectral_axis = spectrum.spectral_axis
+                    else:
+                        # Nếu không có, tạo index array
+                        spectral_axis = np.arange(len(intensities))
 
                     st.session_state.analysis_results = {
                         'type': 'peaks',
                         'spectrum': spectrum,
                         'peaks': peaks,
-                        'properties': properties
+                        'properties': properties,
+                        'intensities': intensities,
+                        'spectral_axis': spectral_axis
                     }
 
                     st.success(f"✅ Đã tìm thấy {len(peaks)} peaks!")
@@ -748,26 +784,20 @@ elif page == "Trực quan hóa":
     elif result_type == 'peaks':
         st.write("### Kết quả Peak Detection")
 
-        spectrum = results['spectrum']
         peaks = results['peaks']
+        intensities = results['intensities']
+        spectral_axis = results['spectral_axis']
 
         fig, ax = plt.subplots(figsize=(12, 6))
 
         # Plot spectrum
-        if hasattr(spectrum, 'spectral_axis'):
-            x_axis = spectrum.spectral_axis
-            y_data = spectrum.spectral_data
-        else:
-            x_axis = np.arange(len(spectrum))
-            y_data = spectrum
-
-        ax.plot(x_axis, y_data, 'b-', linewidth=1.5, label='Spectrum')
-        ax.plot(x_axis[peaks], y_data[peaks], 'ro', markersize=8, label='Peaks')
+        ax.plot(spectral_axis, intensities, 'b-', linewidth=1.5, label='Spectrum')
+        ax.plot(spectral_axis[peaks], intensities[peaks], 'ro', markersize=8, label='Peaks')
 
         # Đánh dấu peaks
         for peak in peaks:
-            ax.axvline(x_axis[peak], color='r', linestyle='--', alpha=0.3)
-            ax.text(x_axis[peak], y_data[peak], f'{x_axis[peak]:.0f}',
+            ax.axvline(spectral_axis[peak], color='r', linestyle='--', alpha=0.3)
+            ax.text(spectral_axis[peak], intensities[peak], f'{spectral_axis[peak]:.0f}',
                    rotation=45, ha='right', va='bottom', fontsize=8)
 
         ax.set_xlabel('Wavenumber (cm⁻¹)')
@@ -784,8 +814,8 @@ elif page == "Trực quan hóa":
         peak_data = {
             'Peak #': range(1, len(peaks)+1),
             'Position (index)': peaks,
-            'Wavenumber (cm⁻¹)': [f"{x_axis[p]:.2f}" for p in peaks],
-            'Intensity': [f"{y_data[p]:.4f}" for p in peaks]
+            'Wavenumber (cm⁻¹)': [f"{spectral_axis[p]:.2f}" for p in peaks],
+            'Intensity': [f"{intensities[p]:.4f}" for p in peaks]
         }
 
         import pandas as pd
