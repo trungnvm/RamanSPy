@@ -1322,10 +1322,13 @@ elif page == "Tiền xử lý":
                         # Plot
                         ax_current.plot(x_data, y_offset, color=color, linewidth=1.2, alpha=0.9, label=item['name'])
 
-                        # Add text label
-                        mid_idx = len(x_data) // 2
-                        ax_current.text(x_data[mid_idx], y_offset[mid_idx], f"  {item['name']}",
-                                      fontsize=8, va='center', color=color, fontweight='bold')
+                        # Add text label - đặt ở cuối phổ, phía trên một chút
+                        last_idx = -1  # Index cuối cùng
+                        # Thêm offset nhỏ để text cao hơn data một chút (10% của offset giữa các phổ)
+                        text_y_offset = y_offset[last_idx] + (offset * 0.1)
+                        ax_current.text(x_data[last_idx], text_y_offset, f"  {item['name']}",
+                                      fontsize=8, va='bottom', ha='left', color=color, fontweight='bold',
+                                      bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor=color, alpha=0.7))
 
                     ax_current.set_title(titles[ax_idx], fontsize=12, fontweight='bold')
                     ax_current.set_xlabel("Wavenumber (cm⁻¹)")
