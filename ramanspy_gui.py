@@ -112,82 +112,132 @@ if page == "Tải dữ liệu":
                 ```
                 """)
 
-        uploaded_file = st.file_uploader(
+        uploaded_files = st.file_uploader(
             "Chọn file dữ liệu:",
             type=['txt', 'csv', 'wdf', 'npy', 'npz', 'dat'],
-            help="Hỗ trợ nhiều định dạng file từ các thiết bị Raman khác nhau"
+            help="Hỗ trợ nhiều định dạng file từ các thiết bị Raman khác nhau",
+            accept_multiple_files=True
         )
 
-        if uploaded_file is not None:
-            try:
-                # Lưu file tạm
-                with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
-                    tmp_file.write(uploaded_file.getvalue())
-                    tmp_path = tmp_file.name
+        # Checkbox để tự động thêm vào collection
+        auto_add_to_collection = st.checkbox(
+            "Tự động thêm vào Collection sau khi tải",
+            value=True,
+            help="Tự động thêm các file đã tải vào collection để dễ quản lý"
+        )
 
-                with st.spinner("Đang tải dữ liệu..."):
-                    # Load dữ liệu theo định dạng
-                    if file_format == "WITec":
-                        st.session_state.data = rp.load.witec(tmp_path)
-                    elif file_format == "Renishaw":
-                        st.session_state.data = rp.load.renishaw(tmp_path)
-                    elif file_format == "NumPy (.npy)":
-                        data_array = np.load(tmp_path)
-                        st.session_state.data = rp.Spectrum(data_array)
-                    else:
-                        # CSV/Text (tùy chỉnh)
-                        # Đọc file và xử lý
-                        with open(tmp_path, 'r', encoding='utf-8') as f:
-                            lines = f.readlines()
+        if uploaded_files:
+            loaded_count = 0
+            failed_files = []
 
-                        # Tìm dòng bắt đầu dữ liệu (bỏ qua header)
-                        data_start = 0
-                        for i, line in enumerate(lines):
-                            # Kiểm tra nếu dòng chứa số (dữ liệu)
-                            if line.strip() and (line.strip()[0].isdigit() or line.strip()[0] == '-'):
-                                data_start = i
-                                break
+            for uploaded_file in uploaded_files:
+                try:
+                    # Lưu file tạm
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_path = tmp_file.name
 
-                        # Parse dữ liệu
-                        wavenumbers = []
-                        intensities = []
+                    with st.spinner(f"Đang tải {uploaded_file.name}..."):
+                        # Load dữ liệu theo định dạng
+                        if file_format == "WITec":
+                            loaded_data = rp.load.witec(tmp_path)
+                        elif file_format == "Renishaw":
+                            loaded_data = rp.load.renishaw(tmp_path)
+                        elif file_format == "NumPy (.npy)":
+                            data_array = np.load(tmp_path)
+                            loaded_data = rp.Spectrum(data_array)
+                        else:
+                            # CSV/Text (tùy chỉnh)
+                            with open(tmp_path, 'r', encoding='utf-8') as f:
+                                lines = f.readlines()
 
-                        for line in lines[data_start:]:
-                            line = line.strip()
-                            if not line:
-                                continue
+                            # Tìm dòng bắt đầu dữ liệu
+                            data_start = 0
+                            for i, line in enumerate(lines):
+                                if line.strip() and (line.strip()[0].isdigit() or line.strip()[0] == '-'):
+                                    data_start = i
+                                    break
 
-                            # Thử các delimiter khác nhau
-                            if ';' in line:
-                                parts = line.split(';')
-                            elif ',' in line:
-                                parts = line.split(',')
-                            elif '\t' in line:
-                                parts = line.split('\t')
-                            else:
-                                parts = line.split()
+                            # Parse dữ liệu
+                            wavenumbers = []
+                            intensities = []
 
-                            if len(parts) >= 2:
-                                try:
-                                    wavenumbers.append(float(parts[0].strip()))
-                                    intensities.append(float(parts[1].strip()))
-                                except ValueError:
+                            for line in lines[data_start:]:
+                                line = line.strip()
+                                if not line:
                                     continue
 
-                        # Tạo Spectrum object
-                        if len(wavenumbers) > 0 and len(intensities) > 0:
-                            st.session_state.data = rp.Spectrum(
-                                np.array(intensities),
-                                spectral_axis=np.array(wavenumbers)
-                            )
-                        else:
-                            raise ValueError("Không thể đọc dữ liệu từ file. Vui lòng kiểm tra định dạng.")
+                                # Thử các delimiter khác nhau
+                                if ';' in line:
+                                    parts = line.split(';')
+                                elif ',' in line:
+                                    parts = line.split(',')
+                                elif '\t' in line:
+                                    parts = line.split('\t')
+                                else:
+                                    parts = line.split()
 
-                os.unlink(tmp_path)
-                st.success(f"✅ Đã tải thành công: {uploaded_file.name}")
+                                if len(parts) >= 2:
+                                    try:
+                                        wavenumbers.append(float(parts[0].strip()))
+                                        intensities.append(float(parts[1].strip()))
+                                    except ValueError:
+                                        continue
 
-                # Hiển thị thông tin dữ liệu
-                st.write("### Thông tin dữ liệu")
+                            # Tạo Spectrum object
+                            if len(wavenumbers) > 0 and len(intensities) > 0:
+                                loaded_data = rp.Spectrum(
+                                    np.array(intensities),
+                                    spectral_axis=np.array(wavenumbers)
+                                )
+                            else:
+                                raise ValueError("Không thể đọc dữ liệu từ file.")
+
+                    os.unlink(tmp_path)
+
+                    # Lưu vào st.session_state.data (file cuối cùng)
+                    st.session_state.data = loaded_data
+
+                    # Tự động thêm vào collection nếu được chọn
+                    if auto_add_to_collection:
+                        # Lấy tên file (không có extension)
+                        file_base_name = Path(uploaded_file.name).stem
+
+                        # Kiểm tra trùng tên
+                        existing_names = [s['name'] for s in st.session_state.spectra_collection]
+                        final_name = file_base_name
+                        counter = 1
+                        while final_name in existing_names:
+                            final_name = f"{file_base_name}_{counter}"
+                            counter += 1
+
+                        st.session_state.spectra_collection.append({
+                            'name': final_name,
+                            'original_filename': uploaded_file.name,
+                            'data': loaded_data,
+                            'preprocessed': None,
+                            'selected': True
+                        })
+
+                    loaded_count += 1
+
+                except Exception as e:
+                    failed_files.append((uploaded_file.name, str(e)))
+
+            # Hiển thị kết quả
+            if loaded_count > 0:
+                st.success(f"✅ Đã tải thành công {loaded_count} file(s)")
+                if auto_add_to_collection:
+                    st.info(f"💡 Đã thêm {loaded_count} phổ vào Collection. Mở rộng '📚 Quản lý Collection Phổ' để xem.")
+
+            if failed_files:
+                st.error(f"❌ Lỗi khi tải {len(failed_files)} file(s):")
+                for fname, error in failed_files:
+                    st.write(f"- {fname}: {error}")
+
+            # Hiển thị thông tin phổ cuối cùng được load
+            if st.session_state.data is not None and loaded_count > 0:
+                st.write("### Thông tin phổ cuối cùng được tải")
                 col1, col2, col3 = st.columns(3)
 
                 with col1:
@@ -197,9 +247,6 @@ if page == "Tải dữ liệu":
                 with col3:
                     if hasattr(st.session_state.data, 'spectral_axis'):
                         st.metric("Số điểm phổ", len(st.session_state.data.spectral_axis))
-
-            except Exception as e:
-                st.error(f"❌ Lỗi khi tải file: {str(e)}")
 
     # Tab 2: Dữ liệu mẫu
     with tab2:
@@ -345,13 +392,13 @@ if page == "Tải dữ liệu":
                         spec['selected'] = False
                     st.rerun()
 
-            # List spectra
+            # List spectra với rename
             for i, spec in enumerate(st.session_state.spectra_collection):
-                col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
+                col1, col2, col3, col4, col5 = st.columns([0.5, 2, 2, 0.6, 0.6])
 
                 with col1:
                     new_selected = st.checkbox(
-                        "Chọn",
+                        "☑",
                         value=spec['selected'],
                         key=f"select_{i}",
                         label_visibility="collapsed"
@@ -360,17 +407,40 @@ if page == "Tải dữ liệu":
                         spec['selected'] = new_selected
 
                 with col2:
-                    data_shape = spec['data'].shape if hasattr(spec['data'], 'shape') else "N/A"
-                    preprocessed_status = "✓ Đã xử lý" if spec['preprocessed'] is not None else "○ Chưa xử lý"
-                    st.write(f"**{spec['name']}** - {data_shape} - {preprocessed_status}")
+                    # Hiển thị tên file gốc nếu có
+                    original_name = spec.get('original_filename', '')
+                    if original_name:
+                        st.write(f"📄 `{original_name}`")
+                    else:
+                        st.write(f"Phổ #{i+1}")
 
                 with col3:
-                    if st.button("🗑️", key=f"del_{i}", help="Xóa phổ này"):
+                    # Editable name
+                    new_name = st.text_input(
+                        "Tên:",
+                        value=spec['name'],
+                        key=f"name_{i}",
+                        label_visibility="collapsed",
+                        placeholder="Đặt tên..."
+                    )
+                    if new_name != spec['name'] and new_name.strip():
+                        # Check duplicate
+                        existing = [s['name'] for idx, s in enumerate(st.session_state.spectra_collection) if idx != i]
+                        if new_name not in existing:
+                            spec['name'] = new_name
+
+                    # Status
+                    data_shape = spec['data'].shape if hasattr(spec['data'], 'shape') else "N/A"
+                    preprocessed_status = "✅" if spec['preprocessed'] is not None else "⚪"
+                    st.caption(f"{preprocessed_status} {data_shape}")
+
+                with col4:
+                    if st.button("🗑️", key=f"del_{i}", help="Xóa"):
                         st.session_state.spectra_collection.pop(i)
                         st.rerun()
 
-                with col4:
-                    if st.button("👁️", key=f"view_{i}", help="Xem phổ này"):
+                with col5:
+                    if st.button("👁️", key=f"view_{i}", help="Load"):
                         st.session_state.data = spec['data']
                         st.session_state.preprocessed_data = spec['preprocessed']
                         st.success(f"Đã load '{spec['name']}'")
@@ -381,42 +451,71 @@ if page == "Tải dữ liệu":
             selected_count = sum(1 for s in st.session_state.spectra_collection if s['selected'])
             st.info(f"**Đã chọn:** {selected_count} phổ")
 
-            if selected_count > 1:
-                if st.button("🔗 Kết hợp phổ đã chọn (để chạy PCA)", type="primary"):
-                    # Combine selected spectra into SpectralContainer
-                    selected_spectra = [s['data'] for s in st.session_state.spectra_collection if s['selected']]
+            if selected_count > 0:
+                col_action1, col_action2 = st.columns(2)
 
-                    try:
-                        # Stack spectra
-                        spectra_arrays = []
-                        for spec in selected_spectra:
-                            if hasattr(spec, 'spectral_data'):
-                                spectra_arrays.append(spec.spectral_data)
-                            else:
-                                spectra_arrays.append(np.array(spec))
+                with col_action1:
+                    # Batch preprocessing
+                    if st.button("⚙️ Tiền xử lý hàng loạt", use_container_width=True, help="Áp dụng pipeline cho các phổ đã chọn"):
+                        # Chuyển sang tab preprocessing với flag
+                        st.session_state['batch_preprocess_mode'] = True
+                        st.info("💡 Chuyển sang tab 'Tiền xử lý', thiết lập pipeline, và click 'Áp dụng cho Collection'")
 
-                        combined_array = np.stack(spectra_arrays)
+                with col_action2:
+                    # Combine spectra
+                    if selected_count > 1:
+                        if st.button("🔗 Kết hợp để chạy PCA", type="primary", use_container_width=True):
+                            # Get selected items
+                            selected_items = [s for s in st.session_state.spectra_collection if s['selected']]
 
-                        # Get common spectral axis (from first spectrum)
-                        if hasattr(selected_spectra[0], 'spectral_axis'):
-                            spectral_axis = selected_spectra[0].spectral_axis
-                        else:
-                            spectral_axis = np.arange(combined_array.shape[-1])
+                            try:
+                                # Ưu tiên dùng preprocessed data nếu có
+                                spectra_arrays = []
+                                using_preprocessed = False
 
-                        # Create SpectralContainer
-                        st.session_state.data = rp.SpectralContainer(combined_array, spectral_axis=spectral_axis)
-                        st.session_state.preprocessed_data = None
+                                for item in selected_items:
+                                    # Dùng preprocessed nếu có, không thì dùng raw
+                                    spec = item['preprocessed'] if item['preprocessed'] is not None else item['data']
 
-                        st.success(f"✅ Đã kết hợp {selected_count} phổ! Giờ bạn có thể chạy PCA.")
-                        st.info("💡 Chuyển sang tab 'Phân tích' để chạy PCA với dữ liệu kết hợp.")
-                        st.rerun()
+                                    if item['preprocessed'] is not None:
+                                        using_preprocessed = True
 
-                    except Exception as e:
-                        st.error(f"❌ Lỗi khi kết hợp phổ: {str(e)}")
+                                    if hasattr(spec, 'spectral_data'):
+                                        spectra_arrays.append(spec.spectral_data)
+                                    else:
+                                        spectra_arrays.append(np.array(spec))
+
+                                combined_array = np.stack(spectra_arrays)
+
+                                # Get common spectral axis
+                                first_spec = selected_items[0]['preprocessed'] if selected_items[0]['preprocessed'] is not None else selected_items[0]['data']
+                                if hasattr(first_spec, 'spectral_axis'):
+                                    spectral_axis = first_spec.spectral_axis
+                                else:
+                                    spectral_axis = np.arange(combined_array.shape[-1])
+
+                                # Create SpectralContainer
+                                st.session_state.data = rp.SpectralContainer(combined_array, spectral_axis=spectral_axis)
+                                st.session_state.preprocessed_data = None
+
+                                if using_preprocessed:
+                                    st.success(f"✅ Đã kết hợp {selected_count} phổ (sử dụng dữ liệu đã tiền xử lý)!")
+                                else:
+                                    st.success(f"✅ Đã kết hợp {selected_count} phổ (dữ liệu gốc)!")
+                                    st.warning("⚠️ Một số phổ chưa được tiền xử lý. Khuyến nghị tiền xử lý trước khi phân tích.")
+
+                                st.info("💡 Chuyển sang tab 'Phân tích' để chạy PCA.")
+                                st.rerun()
+
+                            except Exception as e:
+                                st.error(f"❌ Lỗi khi kết hợp phổ: {str(e)}")
+                    else:
+                        st.info("💡 Chọn ít nhất 2 phổ để kết hợp và chạy PCA.")
+
             elif selected_count == 1:
                 st.info("💡 Chỉ chọn 1 phổ. Sử dụng Peak Detection để phân tích phổ đơn.")
         else:
-            st.info("Collection trống. Tải file và click '➕ Thêm vào Collection' để bắt đầu.")
+            st.info("Collection trống. Tải file và chọn 'Tự động thêm vào Collection' khi upload.")
 
     # Preview dữ liệu nếu đã load
     if st.session_state.data is not None:
@@ -583,6 +682,72 @@ elif page == "Tiền xử lý":
             st.session_state.preprocessed_data = None
             st.session_state.pipeline_steps = []
             st.info("Đã reset pipeline")
+
+    with col_btn3:
+        # Batch preprocessing for collection
+        selected_in_collection = [s for s in st.session_state.spectra_collection if s['selected']]
+        if len(selected_in_collection) > 0:
+            if st.button(f"⚙️ Áp dụng cho Collection ({len(selected_in_collection)})", use_container_width=True):
+                try:
+                    with st.spinner(f"Đang xử lý {len(selected_in_collection)} phổ..."):
+                        # Xây dựng pipeline
+                        steps = []
+
+                        if use_cropping:
+                            steps.append(rp.preprocessing.misc.Cropper(region=(crop_min, crop_max)))
+
+                        if use_despike:
+                            steps.append(rp.preprocessing.despike.WhitakerHayes(
+                                kernel_size=despike_kernel,
+                                threshold=despike_threshold
+                            ))
+
+                        if use_denoise:
+                            if denoise_method == "SavGol":
+                                steps.append(rp.preprocessing.denoise.SavGol(window_length=window_length, polyorder=polyorder))
+                            elif denoise_method == "Gaussian":
+                                steps.append(rp.preprocessing.denoise.Gaussian(sigma=sigma))
+                            else:
+                                steps.append(rp.preprocessing.denoise.Wavelet())
+
+                        if use_baseline:
+                            if baseline_method == "ASPLS":
+                                steps.append(rp.preprocessing.baseline.ASPLS())
+                            elif baseline_method == "ASLS":
+                                steps.append(rp.preprocessing.baseline.ASLS())
+                            else:
+                                steps.append(rp.preprocessing.baseline.Poly(poly_order=poly_order))
+
+                        if use_normalize:
+                            if normalize_method == "MinMax":
+                                steps.append(rp.preprocessing.normalise.MinMax())
+                            elif normalize_method == "AUC":
+                                steps.append(rp.preprocessing.normalise.AUC())
+                            elif normalize_method == "Vector":
+                                steps.append(rp.preprocessing.normalise.Vector())
+                            else:
+                                steps.append(rp.preprocessing.normalise.SNV())
+
+                        # Tạo pipeline
+                        pipeline = rp.preprocessing.Pipeline(steps)
+
+                        # Áp dụng cho từng phổ được chọn
+                        success_count = 0
+                        for item in st.session_state.spectra_collection:
+                            if item['selected']:
+                                try:
+                                    item['preprocessed'] = pipeline.apply(item['data'])
+                                    success_count += 1
+                                except Exception as e:
+                                    st.warning(f"Lỗi khi xử lý '{item['name']}': {str(e)}")
+
+                        st.success(f"✅ Đã xử lý {success_count}/{len(selected_in_collection)} phổ với {len(steps)} bước!")
+                        st.info("💡 Giờ bạn có thể kết hợp các phổ đã xử lý để chạy PCA.")
+
+                except Exception as e:
+                    st.error(f"❌ Lỗi khi xử lý: {str(e)}")
+        else:
+            st.info("💡 Chọn phổ trong Collection để xử lý hàng loạt")
 
     # So sánh trước/sau
     if st.session_state.preprocessed_data is not None:
