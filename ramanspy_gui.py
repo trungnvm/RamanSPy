@@ -1414,6 +1414,31 @@ elif page == "Trực quan hóa":
         spectrum_names = results.get('spectrum_names', [])
         n_components = results.get('n_components', len(loadings))
 
+        # Giải thích PCA
+        with st.expander("ℹ️ PCA là gì? Cách đọc kết quả", expanded=False):
+            st.markdown("""
+            ### Principal Component Analysis (PCA)
+
+            PCA giúp **giảm chiều dữ liệu** và tìm ra **sự khác biệt chính** giữa các phổ.
+
+            #### 📊 **Explained Variance (Scree Plot)**
+            - Cho biết mỗi PC "giải thích" bao nhiêu % sự biến thiên trong dữ liệu
+            - PC1 thường có % cao nhất (ví dụ: 80%) → quan trọng nhất
+            - PC2, PC3, PC4... giảm dần
+
+            #### 🎯 **Score Plot**
+            - Mỗi điểm = 1 phổ của bạn
+            - Khoảng cách giữa các điểm = mức độ khác biệt giữa các phổ
+            - Điểm gần nhau = phổ tương tự
+            - Điểm xa nhau = phổ khác biệt
+
+            #### 📈 **Loading Plot**
+            - Loading = "Phổ đặc trưng" của mỗi PC
+            - Peak cao trong loading plot = wavenumber quan trọng
+            - Cho biết **vùng phổ nào** đóng góp vào sự khác biệt giữa các mẫu
+            - Ví dụ: Peak cao ở 1000 cm⁻¹ trong PC1 loading → vùng 1000 cm⁻¹ là đặc trưng chính phân biệt các phổ
+            """)
+
         col1, col2 = st.columns(2)
 
         with col1:
@@ -1429,31 +1454,96 @@ elif page == "Trực quan hóa":
 
         with col2:
             # Score plot với màu sắc và legend
-            st.write("#### 🎯 Score Plot (PC1 vs PC2)")
-            fig2, ax2 = plt.subplots(figsize=(6, 4))
+            st.write("#### 🎯 Score Plot")
 
-            # Số phổ
-            n_spectra = len(scores)
-            colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
+            # Dropdown để chọn PC nào để plot
+            if n_components >= 2:
+                col_x, col_y = st.columns(2)
+                with col_x:
+                    pc_x = st.selectbox("Trục X:", [f"PC{i+1}" for i in range(n_components)], index=0, key="pc_x_select")
+                    pc_x_idx = int(pc_x.replace("PC", "")) - 1
+                with col_y:
+                    pc_y = st.selectbox("Trục Y:", [f"PC{i+1}" for i in range(n_components)], index=1, key="pc_y_select")
+                    pc_y_idx = int(pc_y.replace("PC", "")) - 1
 
-            # Plot từng điểm với màu riêng
-            for i in range(n_spectra):
-                label = spectrum_names[i] if i < len(spectrum_names) else f'Phổ {i+1}'
-                ax2.scatter(scores[i, 0], scores[i, 1],
-                           color=colors[i], s=100, alpha=0.8,
-                           edgecolors='black', linewidth=1,
-                           label=label)
+                fig2, ax2 = plt.subplots(figsize=(6, 4))
 
-            ax2.set_xlabel(f'PC1 ({explained_variance[0]*100:.1f}%)')
-            ax2.set_ylabel(f'PC2 ({explained_variance[1]*100:.1f}%)')
-            ax2.set_title('PCA Score Plot')
-            ax2.legend(loc='best', fontsize=9, framealpha=0.9)
-            ax2.grid(True, alpha=0.3)
-            st.pyplot(fig2)
-            plt.close()
+                # Số phổ
+                n_spectra = len(scores)
+                colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
+
+                # Plot từng điểm với màu riêng
+                for i in range(n_spectra):
+                    label = spectrum_names[i] if i < len(spectrum_names) else f'Phổ {i+1}'
+                    ax2.scatter(scores[i, pc_x_idx], scores[i, pc_y_idx],
+                               color=colors[i], s=100, alpha=0.8,
+                               edgecolors='black', linewidth=1,
+                               label=label)
+
+                ax2.set_xlabel(f'{pc_x} ({explained_variance[pc_x_idx]*100:.1f}%)')
+                ax2.set_ylabel(f'{pc_y} ({explained_variance[pc_y_idx]*100:.1f}%)')
+                ax2.set_title(f'Score Plot: {pc_x} vs {pc_y}')
+                ax2.legend(loc='best', fontsize=9, framealpha=0.9)
+                ax2.grid(True, alpha=0.3)
+                st.pyplot(fig2)
+                plt.close()
+            else:
+                st.warning("Cần ít nhất 2 components để plot Score Plot")
+
+        # Score plot matrix (tất cả các cặp PC)
+        if n_components >= 3:
+            st.markdown("---")
+            show_matrix = st.checkbox("📊 Hiển thị Score Plot Matrix (tất cả các cặp PC)", value=False)
+
+            if show_matrix:
+                st.write("### 🎯 Score Plot Matrix")
+                st.info("Ma trận này hiển thị tất cả các cặp PC có thể. Mỗi ô = 1 score plot với 2 PC khác nhau.")
+
+                # Tính số plots
+                n_plots = min(4, n_components)  # Tối đa 4 PCs để không quá nhiều plots
+                fig_matrix, axes_matrix = plt.subplots(n_plots-1, n_plots-1, figsize=(4*(n_plots-1), 4*(n_plots-1)))
+
+                n_spectra = len(scores)
+                colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
+
+                for i in range(n_plots-1):
+                    for j in range(n_plots-1):
+                        if j > i:
+                            # Upper triangle - hide
+                            if n_plots > 2:
+                                axes_matrix[i, j].set_visible(False)
+                        else:
+                            # Lower triangle - plot
+                            ax = axes_matrix[i, j] if n_plots > 2 else axes_matrix[i] if n_plots == 2 and j == 0 else axes_matrix
+
+                            # PC indices: x = j+1, y = i+2
+                            pc_x_idx = j
+                            pc_y_idx = i + 1
+
+                            # Plot each spectrum
+                            for k in range(n_spectra):
+                                label = spectrum_names[k] if k < len(spectrum_names) else f'Phổ {k+1}'
+                                ax.scatter(scores[k, pc_x_idx], scores[k, pc_y_idx],
+                                          color=colors[k], s=60, alpha=0.8,
+                                          edgecolors='black', linewidth=0.5,
+                                          label=label if i == 0 and j == 0 else "")
+
+                            ax.set_xlabel(f'PC{pc_x_idx+1} ({explained_variance[pc_x_idx]*100:.1f}%)', fontsize=9)
+                            ax.set_ylabel(f'PC{pc_y_idx+1} ({explained_variance[pc_y_idx]*100:.1f}%)', fontsize=9)
+                            ax.grid(True, alpha=0.3)
+
+                            # Legend chỉ ở plot đầu tiên
+                            if i == 0 and j == 0:
+                                ax.legend(loc='best', fontsize=7, framealpha=0.9)
+
+                plt.tight_layout()
+                st.pyplot(fig_matrix)
+                plt.close()
 
         # Loading plot - hiển thị TẤT CẢ components
+        st.markdown("---")
         st.write(f"#### 📈 Loading Plots (tất cả {n_components} components)")
+        st.info("💡 Loading plot cho biết wavenumber nào quan trọng trong mỗi PC. Peak cao = vùng phổ đặc trưng.")
 
         # Tính số hàng và cột cho subplot
         n_cols = min(3, n_components)  # Tối đa 3 cột
