@@ -350,10 +350,7 @@ elif page == "Tiền xử lý":
         st.write("**Bước 2: Loại bỏ Cosmic Ray**")
         use_despike = st.checkbox("Sử dụng Despike", value=True)
         if use_despike:
-            despike_method = st.selectbox(
-                "Phương pháp:",
-                ["WhitakerHayes", "Median"]
-            )
+            st.info("💡 Sử dụng phương pháp WhitakerHayes")
 
     col3, col4 = st.columns([1, 1])
 
@@ -410,10 +407,7 @@ elif page == "Tiền xử lý":
                         steps.append(rp.preprocessing.misc.Cropper(region=(crop_min, crop_max)))
 
                     if use_despike:
-                        if despike_method == "WhitakerHayes":
-                            steps.append(rp.preprocessing.despike.WhitakerHayes())
-                        else:
-                            steps.append(rp.preprocessing.despike.Median())
+                        steps.append(rp.preprocessing.despike.WhitakerHayes())
 
                     if use_denoise:
                         if denoise_method == "SavGol":
@@ -466,10 +460,18 @@ elif page == "Tiền xử lý":
 
         try:
             # Lấy phổ mẫu
-            if hasattr(st.session_state.data, 'flat'):
+            data_type = type(st.session_state.data).__name__
+
+            if data_type == 'Spectrum':
+                # Spectrum đơn lẻ
+                raw_spectrum = st.session_state.data
+                processed_spectrum = st.session_state.preprocessed_data
+            elif hasattr(st.session_state.data, 'flat'):
+                # Volumetric data
                 raw_spectrum = st.session_state.data.flat[0]
                 processed_spectrum = st.session_state.preprocessed_data.flat[0]
-            elif hasattr(st.session_state.data, '__getitem__'):
+            elif hasattr(st.session_state.data, '__len__') and len(st.session_state.data.shape) > 1:
+                # Multi-spectrum data
                 raw_spectrum = st.session_state.data[0]
                 processed_spectrum = st.session_state.preprocessed_data[0]
             else:
