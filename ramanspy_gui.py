@@ -667,6 +667,17 @@ if page == "Tải dữ liệu":
                 else:
                     n_spectra = min(5, len(st.session_state.data))
 
+                # Lấy tên từ Collection nếu có
+                spectrum_labels = []
+                if len(st.session_state.spectra_collection) > 0:
+                    selected_items = [s for s in st.session_state.spectra_collection if s['selected']]
+                    if len(selected_items) > 0:
+                        spectrum_labels = [item['name'] for item in selected_items[:n_spectra]]
+
+                # Fallback labels nếu không có từ collection
+                if len(spectrum_labels) == 0:
+                    spectrum_labels = [f'Phổ {i+1}' for i in range(n_spectra)]
+
                 colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
 
                 fig, ax = plt.subplots(figsize=(10, 4), dpi=150)
@@ -688,7 +699,9 @@ if page == "Tải dữ liệu":
                     if hasattr(y_data, 'shape') and len(y_data.shape) > 1:
                         y_data = y_data.flatten()
 
-                    ax.plot(x_data, y_data, color=colors[i], linewidth=1.5, alpha=0.7, label=f'Phổ {i+1}')
+                    # Use name from collection
+                    label = spectrum_labels[i] if i < len(spectrum_labels) else f'Phổ {i+1}'
+                    ax.plot(x_data, y_data, color=colors[i], linewidth=1.5, alpha=0.7, label=label)
 
                 ax.set_title(f"Preview phổ Raman ({n_spectra} phổ)")
                 ax.set_xlabel("Wavenumber (cm⁻¹)")
@@ -1129,6 +1142,67 @@ elif page == "Tiền xử lý":
 
                 plt.tight_layout()
                 plot_with_download(fig, "batch_preprocessing_overlay.png", "📥 Tải overlay plots")
+
+                # CSV Export cho batch preprocessing
+                st.markdown("---")
+                st.write("### 📥 Tải dữ liệu batch preprocessing")
+
+                col_batch1, col_batch2 = st.columns(2)
+
+                with col_batch1:
+                    st.write("**Tất cả phổ gốc**")
+                    try:
+                        # Tạo DataFrame cho tất cả phổ raw
+                        raw_data_dict = {}
+                        wavenumbers = None
+
+                        for item in selected_in_collection:
+                            raw_spec = item['data']
+                            if hasattr(raw_spec, 'spectral_axis') and hasattr(raw_spec, 'spectral_data'):
+                                if wavenumbers is None:
+                                    wavenumbers = raw_spec.spectral_axis
+                                y_data = raw_spec.spectral_data
+                                if len(y_data.shape) > 1:
+                                    y_data = y_data.flatten()
+                                raw_data_dict[item['name']] = y_data
+
+                        if wavenumbers is not None and len(raw_data_dict) > 0:
+                            raw_batch_df = pd.DataFrame(raw_data_dict)
+                            raw_batch_df.insert(0, 'Wavenumber (cm⁻¹)', wavenumbers)
+                            create_csv_download(raw_batch_df, "batch_raw_spectra.csv", "📥 Tải tất cả phổ gốc CSV")
+                        else:
+                            st.info("Không có dữ liệu để export")
+                    except Exception as e:
+                        st.warning(f"Không thể export: {str(e)}")
+
+                with col_batch2:
+                    st.write("**Tất cả phổ đã xử lý**")
+                    if len(preprocessed_items) > 0:
+                        try:
+                            # Tạo DataFrame cho tất cả phổ preprocessed
+                            proc_data_dict = {}
+                            wavenumbers = None
+
+                            for item in preprocessed_items:
+                                proc_spec = item['preprocessed']
+                                if hasattr(proc_spec, 'spectral_axis') and hasattr(proc_spec, 'spectral_data'):
+                                    if wavenumbers is None:
+                                        wavenumbers = proc_spec.spectral_axis
+                                    y_data = proc_spec.spectral_data
+                                    if len(y_data.shape) > 1:
+                                        y_data = y_data.flatten()
+                                    proc_data_dict[item['name']] = y_data
+
+                            if wavenumbers is not None and len(proc_data_dict) > 0:
+                                proc_batch_df = pd.DataFrame(proc_data_dict)
+                                proc_batch_df.insert(0, 'Wavenumber (cm⁻¹)', wavenumbers)
+                                create_csv_download(proc_batch_df, "batch_preprocessed_spectra.csv", "📥 Tải tất cả phổ đã xử lý CSV")
+                            else:
+                                st.info("Không có dữ liệu để export")
+                        except Exception as e:
+                            st.warning(f"Không thể export: {str(e)}")
+                    else:
+                        st.info("Chưa có phổ nào được tiền xử lý")
 
             except Exception as e:
                 st.error(f"Lỗi khi hiển thị overlay plots: {str(e)}")
