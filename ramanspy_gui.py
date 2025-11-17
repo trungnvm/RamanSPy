@@ -481,16 +481,34 @@ elif page == "Tiền xử lý":
             with col_before:
                 st.write("**Trước xử lý**")
                 fig1, ax1 = plt.subplots(figsize=(6, 4))
-                rp.plot.spectra(raw_spectrum, ax=ax1)
+
+                # Plot trực tiếp với matplotlib để tránh lỗi indexing
+                if hasattr(raw_spectrum, 'spectral_axis') and hasattr(raw_spectrum, 'spectral_data'):
+                    ax1.plot(raw_spectrum.spectral_axis, raw_spectrum.spectral_data, linewidth=1.5)
+                    ax1.set_xlabel("Wavenumber (cm⁻¹)")
+                    ax1.set_ylabel("Intensity")
+                else:
+                    rp.plot.spectra(raw_spectrum, ax=ax1)
+
                 ax1.set_title("Phổ gốc")
+                ax1.grid(True, alpha=0.3)
                 st.pyplot(fig1)
                 plt.close()
 
             with col_after:
                 st.write("**Sau xử lý**")
                 fig2, ax2 = plt.subplots(figsize=(6, 4))
-                rp.plot.spectra(processed_spectrum, ax=ax2)
+
+                # Plot trực tiếp với matplotlib để tránh lỗi indexing
+                if hasattr(processed_spectrum, 'spectral_axis') and hasattr(processed_spectrum, 'spectral_data'):
+                    ax2.plot(processed_spectrum.spectral_axis, processed_spectrum.spectral_data, linewidth=1.5)
+                    ax2.set_xlabel("Wavenumber (cm⁻¹)")
+                    ax2.set_ylabel("Intensity")
+                else:
+                    rp.plot.spectra(processed_spectrum, ax=ax2)
+
                 ax2.set_title("Phổ đã xử lý")
+                ax2.grid(True, alpha=0.3)
                 st.pyplot(fig2)
                 plt.close()
 
