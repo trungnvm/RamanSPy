@@ -1077,9 +1077,21 @@ elif page == "Phân tích":
 
     st.write("### Chọn phương pháp phân tích")
 
+    # Warning về N-FINDR compatibility
+    with st.expander("⚠️ Lưu ý về Spectral Unmixing (N-FINDR)", expanded=False):
+        st.warning("""
+        **N-FINDR có thể gặp lỗi compatibility với scipy!**
+
+        Nếu bạn gặp lỗi `module 'scipy.linalg' has no attribute '_flinalg'`,
+        đây là vấn đề đã biết của RamanSPy với một số phiên bản scipy.
+
+        **Khuyến nghị**: Sử dụng **PCA (Component Analysis)** thay thế -
+        hoạt động tốt, ổn định, và cho kết quả tương tự!
+        """)
+
     analysis_method = st.selectbox(
         "Phương pháp:",
-        ["Spectral Unmixing (N-FINDR)", "Peak Detection", "Component Analysis (PCA)"]
+        ["Component Analysis (PCA)", "Peak Detection", "Spectral Unmixing (N-FINDR)"]
     )
 
     # Spectral Unmixing
@@ -1114,8 +1126,27 @@ elif page == "Phân tích":
                         st.stop()
 
                 with st.spinner("Đang phân tích..."):
-                    unmixer = rp.analysis.unmix.NFINDR(n_endmembers=n_endmembers)
-                    abundance_maps, endmembers = unmixer.apply(data_to_analyze)
+                    try:
+                        unmixer = rp.analysis.unmix.NFINDR(n_endmembers=n_endmembers)
+                        abundance_maps, endmembers = unmixer.apply(data_to_analyze)
+                    except AttributeError as ae:
+                        if "_flinalg" in str(ae) or "scipy.linalg" in str(ae):
+                            st.error("❌ Lỗi scipy compatibility với N-FINDR")
+                            st.warning("""
+                            **Nguyên nhân**: RamanSPy's N-FINDR implementation có vấn đề compatibility với phiên bản scipy hiện tại.
+
+                            **Giải pháp**:
+                            1. Sử dụng **PCA** thay vì N-FINDR cho việc phân tích thành phần
+                            2. Hoặc cập nhật RamanSPy/scipy:
+                               ```
+                               pip install --upgrade ramanspy scipy
+                               ```
+
+                            **Khuyến nghị**: Sử dụng PCA (Component Analysis) - hoạt động tốt và ổn định hơn!
+                            """)
+                            st.stop()
+                        else:
+                            raise ae
 
                     st.session_state.analysis_results = {
                         'type': 'unmixing',
