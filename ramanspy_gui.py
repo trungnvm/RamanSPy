@@ -298,18 +298,26 @@ if page == "Tải dữ liệu":
 
         try:
             # Lấy một vài phổ để hiển thị
-            if hasattr(st.session_state.data, 'flat'):
+            data_type = type(st.session_state.data).__name__
+
+            if data_type == 'Spectrum':
+                # Spectrum đơn lẻ
+                sample_spectra = st.session_state.data
+            elif hasattr(st.session_state.data, 'flat'):
                 # Volumetric data
                 sample_spectra = st.session_state.data.flat[0:5]
             elif hasattr(st.session_state.data, '__len__') and len(st.session_state.data.shape) > 1:
                 sample_spectra = st.session_state.data[0:5]
             else:
-                sample_spectra = [st.session_state.data]
+                sample_spectra = st.session_state.data
 
             # Plot
             fig, ax = plt.subplots(figsize=(10, 4))
             rp.plot.spectra(sample_spectra, ax=ax, plot_type='single')
-            ax.set_title("Preview các phổ mẫu")
+            ax.set_title("Preview phổ Raman")
+            ax.set_xlabel("Wavenumber (cm⁻¹)")
+            ax.set_ylabel("Intensity")
+            ax.grid(True, alpha=0.3)
             st.pyplot(fig)
             plt.close()
 
