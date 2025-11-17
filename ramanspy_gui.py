@@ -606,25 +606,80 @@ if page == "Tải dữ liệu":
             data_type = type(st.session_state.data).__name__
 
             if data_type == 'Spectrum':
-                # Spectrum đơn lẻ
-                sample_spectra = st.session_state.data
-            elif hasattr(st.session_state.data, 'flat'):
-                # Volumetric data
-                sample_spectra = st.session_state.data.flat[0:5]
-            elif hasattr(st.session_state.data, '__len__') and len(st.session_state.data.shape) > 1:
-                sample_spectra = st.session_state.data[0:5]
-            else:
-                sample_spectra = st.session_state.data
+                # Spectrum đơn lẻ - plot với màu đẹp
+                fig, ax = plt.subplots(figsize=(10, 4))
 
-            # Plot
-            fig, ax = plt.subplots(figsize=(10, 4))
-            rp.plot.spectra(sample_spectra, ax=ax, plot_type='single')
-            ax.set_title("Preview phổ Raman")
-            ax.set_xlabel("Wavenumber (cm⁻¹)")
-            ax.set_ylabel("Intensity")
-            ax.grid(True, alpha=0.3)
-            st.pyplot(fig)
-            plt.close()
+                if hasattr(st.session_state.data, 'spectral_axis') and hasattr(st.session_state.data, 'spectral_data'):
+                    ax.plot(st.session_state.data.spectral_axis, st.session_state.data.spectral_data,
+                           color='#1f77b4', linewidth=1.5)
+                    ax.set_xlabel("Wavenumber (cm⁻¹)")
+                    ax.set_ylabel("Intensity")
+                else:
+                    rp.plot.spectra(st.session_state.data, ax=ax, plot_type='single')
+
+                ax.set_title("Preview phổ Raman")
+                ax.grid(True, alpha=0.3)
+                st.pyplot(fig)
+                plt.close()
+
+            elif hasattr(st.session_state.data, 'flat'):
+                # Volumetric data - plot 5 phổ đầu với màu khác nhau
+                sample_spectra = st.session_state.data.flat[0:5]
+                n_samples = len(sample_spectra)
+                colors = plt.cm.tab10(np.linspace(0, 1, n_samples))
+
+                fig, ax = plt.subplots(figsize=(10, 4))
+                for i in range(n_samples):
+                    spec = sample_spectra[i]
+                    if hasattr(spec, 'spectral_axis') and hasattr(spec, 'spectral_data'):
+                        ax.plot(spec.spectral_axis, spec.spectral_data,
+                               color=colors[i], linewidth=1.5, alpha=0.7, label=f'Phổ {i+1}')
+
+                ax.set_title("Preview phổ Raman (5 phổ đầu)")
+                ax.set_xlabel("Wavenumber (cm⁻¹)")
+                ax.set_ylabel("Intensity")
+                ax.legend(loc='best', fontsize=8)
+                ax.grid(True, alpha=0.3)
+                st.pyplot(fig)
+                plt.close()
+
+            elif hasattr(st.session_state.data, '__len__') and len(st.session_state.data.shape) > 1:
+                # Multi-spectrum data - plot với màu khác nhau
+                n_spectra = min(5, len(st.session_state.data))
+                colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
+
+                fig, ax = plt.subplots(figsize=(10, 4))
+                for i in range(n_spectra):
+                    spec = st.session_state.data[i]
+                    if hasattr(spec, 'spectral_axis') and hasattr(spec, 'spectral_data'):
+                        ax.plot(spec.spectral_axis, spec.spectral_data,
+                               color=colors[i], linewidth=1.5, alpha=0.7, label=f'Phổ {i+1}')
+                    elif hasattr(st.session_state.data, 'spectral_axis'):
+                        # SpectralContainer với spectral_axis chung
+                        y_data = spec if isinstance(spec, np.ndarray) else np.array(spec)
+                        if len(y_data.shape) > 1:
+                            y_data = y_data.flatten()
+                        ax.plot(st.session_state.data.spectral_axis, y_data,
+                               color=colors[i], linewidth=1.5, alpha=0.7, label=f'Phổ {i+1}')
+
+                ax.set_title(f"Preview phổ Raman ({n_spectra} phổ đầu)")
+                ax.set_xlabel("Wavenumber (cm⁻¹)")
+                ax.set_ylabel("Intensity")
+                ax.legend(loc='best', fontsize=8)
+                ax.grid(True, alpha=0.3)
+                st.pyplot(fig)
+                plt.close()
+            else:
+                # Fallback
+                sample_spectra = st.session_state.data
+                fig, ax = plt.subplots(figsize=(10, 4))
+                rp.plot.spectra(sample_spectra, ax=ax, plot_type='single')
+                ax.set_title("Preview phổ Raman")
+                ax.set_xlabel("Wavenumber (cm⁻¹)")
+                ax.set_ylabel("Intensity")
+                ax.grid(True, alpha=0.3)
+                st.pyplot(fig)
+                plt.close()
 
         except Exception as e:
             st.error(f"Không thể hiển thị preview: {str(e)}")
@@ -1186,12 +1241,22 @@ elif page == "Phân tích":
                     scores = pca.fit_transform(data_matrix)
                     loadings = pca.components_
 
+                    # Lấy tên phổ từ Collection nếu có
+                    spectrum_names = []
+                    if len(st.session_state.spectra_collection) > 0:
+                        # Lấy selected items
+                        selected_items = [s for s in st.session_state.spectra_collection if s['selected']]
+                        if len(selected_items) > 0:
+                            spectrum_names = [item['name'] for item in selected_items]
+
                     st.session_state.analysis_results = {
                         'type': 'pca',
                         'scores': scores,
                         'loadings': loadings,
                         'explained_variance': pca.explained_variance_ratio_,
-                        'data': data_to_analyze
+                        'data': data_to_analyze,
+                        'spectrum_names': spectrum_names,
+                        'n_components': n_components
                     }
 
                     st.success(f"✅ Đã hoàn thành PCA với {n_components} components!")
@@ -1315,6 +1380,8 @@ elif page == "Trực quan hóa":
         scores = results['scores']
         loadings = results['loadings']
         explained_variance = results['explained_variance']
+        spectrum_names = results.get('spectrum_names', [])
+        n_components = results.get('n_components', len(loadings))
 
         col1, col2 = st.columns(2)
 
@@ -1330,29 +1397,58 @@ elif page == "Trực quan hóa":
             plt.close()
 
         with col2:
-            # Score plot
+            # Score plot với màu sắc và legend
             st.write("#### 🎯 Score Plot (PC1 vs PC2)")
             fig2, ax2 = plt.subplots(figsize=(6, 4))
-            ax2.scatter(scores[:, 0], scores[:, 1], alpha=0.6)
+
+            # Số phổ
+            n_spectra = len(scores)
+            colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
+
+            # Plot từng điểm với màu riêng
+            for i in range(n_spectra):
+                label = spectrum_names[i] if i < len(spectrum_names) else f'Phổ {i+1}'
+                ax2.scatter(scores[i, 0], scores[i, 1],
+                           color=colors[i], s=100, alpha=0.8,
+                           edgecolors='black', linewidth=1,
+                           label=label)
+
             ax2.set_xlabel(f'PC1 ({explained_variance[0]*100:.1f}%)')
             ax2.set_ylabel(f'PC2 ({explained_variance[1]*100:.1f}%)')
             ax2.set_title('PCA Score Plot')
+            ax2.legend(loc='best', fontsize=9, framealpha=0.9)
             ax2.grid(True, alpha=0.3)
             st.pyplot(fig2)
             plt.close()
 
-        # Loading plot
-        st.write("#### 📈 Loading Plots")
-        fig3, axes = plt.subplots(1, min(3, len(loadings)), figsize=(12, 4))
-        if len(loadings) == 1:
-            axes = [axes]
+        # Loading plot - hiển thị TẤT CẢ components
+        st.write(f"#### 📈 Loading Plots (tất cả {n_components} components)")
 
-        for i, ax in enumerate(axes[:len(loadings)]):
-            ax.plot(loadings[i])
-            ax.set_title(f'PC{i+1} Loading')
+        # Tính số hàng và cột cho subplot
+        n_cols = min(3, n_components)  # Tối đa 3 cột
+        n_rows = (n_components + n_cols - 1) // n_cols  # Làm tròn lên
+
+        fig3, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+
+        # Flatten axes để dễ iterate
+        if n_components == 1:
+            axes = [axes]
+        elif n_rows == 1 or n_cols == 1:
+            axes = axes.flatten()
+        else:
+            axes = axes.flatten()
+
+        for i in range(n_components):
+            ax = axes[i]
+            ax.plot(loadings[i], linewidth=1.5, color=plt.cm.tab10(i/10))
+            ax.set_title(f'PC{i+1} Loading ({explained_variance[i]*100:.1f}%)', fontweight='bold')
             ax.set_xlabel('Wavenumber index')
             ax.set_ylabel('Loading')
             ax.grid(True, alpha=0.3)
+
+        # Ẩn các subplot trống nếu có
+        for i in range(n_components, len(axes)):
+            axes[i].set_visible(False)
 
         plt.tight_layout()
         st.pyplot(fig3)
