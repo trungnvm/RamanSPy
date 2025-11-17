@@ -120,11 +120,16 @@ if page == "Tải dữ liệu":
         )
 
         # Checkbox để tự động thêm vào collection
+        st.markdown("---")
         auto_add_to_collection = st.checkbox(
-            "Tự động thêm vào Collection sau khi tải",
+            "✅ Tự động thêm TẤT CẢ vào Collection sau khi tải",
             value=True,
-            help="Tự động thêm các file đã tải vào collection để dễ quản lý"
+            help="Khuyến nghị BẬT option này để tất cả files được thêm vào Collection tự động"
         )
+        if auto_add_to_collection:
+            st.caption("💡 Tất cả files upload sẽ tự động được thêm vào Collection để quản lý và xử lý hàng loạt")
+        else:
+            st.caption("⚠️ Files sẽ KHÔNG được thêm vào Collection - bạn phải thêm thủ công")
 
         if uploaded_files:
             loaded_count = 0
@@ -377,7 +382,18 @@ if page == "Tải dữ liệu":
 
         # Hiển thị collection
         if len(st.session_state.spectra_collection) > 0:
-            st.write(f"### 📋 Collection ({len(st.session_state.spectra_collection)} phổ)")
+            # Thống kê collection
+            total_count = len(st.session_state.spectra_collection)
+            preprocessed_count = sum(1 for s in st.session_state.spectra_collection if s['preprocessed'] is not None)
+
+            st.write(f"### 📋 Collection ({total_count} phổ)")
+
+            # Progress bar cho preprocessing status
+            if total_count > 0:
+                progress = preprocessed_count / total_count
+                st.progress(progress, text=f"Đã tiền xử lý: {preprocessed_count}/{total_count} phổ ({progress*100:.0f}%)")
+
+            st.markdown("")  # Spacing
 
             # Selection mode
             col_mode1, col_mode2 = st.columns(2)
@@ -429,10 +445,12 @@ if page == "Tải dữ liệu":
                         if new_name not in existing:
                             spec['name'] = new_name
 
-                    # Status
+                    # Status với màu sắc rõ ràng
                     data_shape = spec['data'].shape if hasattr(spec['data'], 'shape') else "N/A"
-                    preprocessed_status = "✅" if spec['preprocessed'] is not None else "⚪"
-                    st.caption(f"{preprocessed_status} {data_shape}")
+                    if spec['preprocessed'] is not None:
+                        st.caption(f"✅ **Đã xử lý** | {data_shape}")
+                    else:
+                        st.caption(f"⚪ *Chưa xử lý* | {data_shape}")
 
                 with col4:
                     if st.button("🗑️", key=f"del_{i}", help="Xóa"):
@@ -449,22 +467,55 @@ if page == "Tải dữ liệu":
             # Actions
             st.markdown("---")
             selected_count = sum(1 for s in st.session_state.spectra_collection if s['selected'])
-            st.info(f"**Đã chọn:** {selected_count} phổ")
+
+            # Hiển thị thống kê chi tiết
+            col_stat1, col_stat2, col_stat3 = st.columns(3)
+            with col_stat1:
+                st.metric("Đã chọn", f"{selected_count}/{total_count}")
+            with col_stat2:
+                selected_preprocessed = sum(1 for s in st.session_state.spectra_collection if s['selected'] and s['preprocessed'] is not None)
+                st.metric("Đã xử lý", f"{selected_preprocessed}/{selected_count}")
+            with col_stat3:
+                selected_raw = selected_count - selected_preprocessed
+                if selected_raw > 0:
+                    st.metric("Chưa xử lý", selected_raw, delta="Cần xử lý", delta_color="off")
+                else:
+                    st.metric("Chưa xử lý", "0", delta="✓", delta_color="normal")
+
+            st.markdown("")
 
             if selected_count > 0:
-                col_action1, col_action2 = st.columns(2)
+                # Batch preprocessing section
+                st.write("#### ⚙️ Tiền xử lý hàng loạt")
+                col_prep1, col_prep2 = st.columns([2, 1])
+
+                with col_prep1:
+                    st.info("💡 Chuyển sang tab **'Tiền xử lý'**, thiết lập pipeline, rồi click nút **'⚙️ Áp dụng cho Collection'**")
+
+                with col_prep2:
+                    # Quick access button
+                    if st.button("📍 Đi tới Tiền xử lý", use_container_width=True):
+                        st.session_state['show_batch_hint'] = True
+                        st.info("Chuyển sang tab 'Tiền xử lý' bên trên để thiết lập pipeline!")
+
+                st.markdown("---")
+
+                # Combine section
+                st.write("#### 🔗 Kết hợp phổ để phân tích")
+                col_action1, col_action2 = st.columns([2, 1])
 
                 with col_action1:
-                    # Batch preprocessing
-                    if st.button("⚙️ Tiền xử lý hàng loạt", use_container_width=True, help="Áp dụng pipeline cho các phổ đã chọn"):
-                        # Chuyển sang tab preprocessing với flag
-                        st.session_state['batch_preprocess_mode'] = True
-                        st.info("💡 Chuyển sang tab 'Tiền xử lý', thiết lập pipeline, và click 'Áp dụng cho Collection'")
+                    if selected_count > 1:
+                        # Hiển thị warning nếu có phổ chưa xử lý
+                        if selected_raw > 0:
+                            st.warning(f"⚠️ Có {selected_raw} phổ chưa tiền xử lý. Khuyến nghị xử lý trước khi kết hợp.")
+                        else:
+                            st.success(f"✅ Tất cả {selected_count} phổ đã được tiền xử lý!")
 
                 with col_action2:
                     # Combine spectra
                     if selected_count > 1:
-                        if st.button("🔗 Kết hợp để chạy PCA", type="primary", use_container_width=True):
+                        if st.button("🔗 Kết hợp phổ", type="primary", use_container_width=True):
                             # Get selected items
                             selected_items = [s for s in st.session_state.spectra_collection if s['selected']]
 
@@ -553,6 +604,18 @@ if page == "Tải dữ liệu":
 # ==================== TRANG TIỀN XỬ LÝ ====================
 elif page == "Tiền xử lý":
     st.markdown('<p class="sub-header">⚙️ Tiền xử lý dữ liệu</p>', unsafe_allow_html=True)
+
+    # Hiển thị thông tin collection nếu có
+    if len(st.session_state.spectra_collection) > 0:
+        selected_in_collection = [s for s in st.session_state.spectra_collection if s['selected']]
+        if len(selected_in_collection) > 0:
+            preprocessed_in_selected = sum(1 for s in selected_in_collection if s['preprocessed'] is not None)
+            raw_in_selected = len(selected_in_collection) - preprocessed_in_selected
+
+            if raw_in_selected > 0:
+                st.info(f"📚 Collection: {len(selected_in_collection)} phổ đã chọn | ✅ {preprocessed_in_selected} đã xử lý | ⚪ {raw_in_selected} chưa xử lý")
+            else:
+                st.success(f"📚 Collection: {len(selected_in_collection)} phổ đã chọn | ✅ Tất cả đã xử lý!")
 
     if st.session_state.data is None:
         st.warning("⚠️ Vui lòng tải dữ liệu trước!")
@@ -687,7 +750,8 @@ elif page == "Tiền xử lý":
         # Batch preprocessing for collection
         selected_in_collection = [s for s in st.session_state.spectra_collection if s['selected']]
         if len(selected_in_collection) > 0:
-            if st.button(f"⚙️ Áp dụng cho Collection ({len(selected_in_collection)})", use_container_width=True):
+            button_label = f"⚙️ Áp dụng cho Collection ({len(selected_in_collection)} phổ)"
+            if st.button(button_label, use_container_width=True, type="primary"):
                 try:
                     with st.spinner(f"Đang xử lý {len(selected_in_collection)} phổ..."):
                         # Xây dựng pipeline
@@ -731,18 +795,25 @@ elif page == "Tiền xử lý":
                         # Tạo pipeline
                         pipeline = rp.preprocessing.Pipeline(steps)
 
-                        # Áp dụng cho từng phổ được chọn
+                        # Áp dụng cho từng phổ được chọn với progress bar
                         success_count = 0
-                        for item in st.session_state.spectra_collection:
+                        progress_bar = st.progress(0, text="Bắt đầu xử lý...")
+
+                        for idx, item in enumerate(st.session_state.spectra_collection):
                             if item['selected']:
                                 try:
+                                    progress = (idx + 1) / len(selected_in_collection)
+                                    progress_bar.progress(progress, text=f"Đang xử lý {item['name']}... ({idx + 1}/{len(selected_in_collection)})")
+
                                     item['preprocessed'] = pipeline.apply(item['data'])
                                     success_count += 1
                                 except Exception as e:
                                     st.warning(f"Lỗi khi xử lý '{item['name']}': {str(e)}")
 
-                        st.success(f"✅ Đã xử lý {success_count}/{len(selected_in_collection)} phổ với {len(steps)} bước!")
-                        st.info("💡 Giờ bạn có thể kết hợp các phổ đã xử lý để chạy PCA.")
+                        progress_bar.progress(1.0, text="✅ Hoàn thành!")
+
+                        st.success(f"✅ Đã xử lý thành công {success_count}/{len(selected_in_collection)} phổ với {len(steps)} bước!")
+                        st.info("💡 Quay lại tab 'Tải dữ liệu' → mở 'Quản lý Collection' để kết hợp phổ và chạy PCA.")
 
                 except Exception as e:
                     st.error(f"❌ Lỗi khi xử lý: {str(e)}")
