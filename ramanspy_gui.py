@@ -10,6 +10,44 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import tempfile
 import os
+import io
+import pandas as pd
+
+# Helper functions
+def plot_with_download(fig, filename="plot.png", download_label="📥 Tải plot"):
+    """Display plot with download button"""
+    # Save to bytes
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+    buf.seek(0)
+
+    # Display plot
+    st.pyplot(fig)
+
+    # Download button
+    st.download_button(
+        label=download_label,
+        data=buf,
+        file_name=filename,
+        mime="image/png",
+        use_container_width=True
+    )
+
+    plt.close(fig)
+
+def create_csv_download(dataframe, filename="data.csv", label="📥 Tải CSV"):
+    """Create download button for CSV data"""
+    csv_buffer = io.StringIO()
+    dataframe.to_csv(csv_buffer, index=False, encoding='utf-8')
+    csv_buffer.seek(0)
+
+    st.download_button(
+        label=label,
+        data=csv_buffer.getvalue(),
+        file_name=filename,
+        mime="text/csv",
+        use_container_width=True
+    )
 
 # Cấu hình trang
 st.set_page_config(
@@ -607,7 +645,7 @@ if page == "Tải dữ liệu":
 
             if data_type == 'Spectrum':
                 # Spectrum đơn lẻ - plot với màu đẹp
-                fig, ax = plt.subplots(figsize=(10, 4))
+                fig, ax = plt.subplots(figsize=(10, 4), dpi=150)
 
                 if hasattr(st.session_state.data, 'spectral_axis') and hasattr(st.session_state.data, 'spectral_data'):
                     ax.plot(st.session_state.data.spectral_axis, st.session_state.data.spectral_data,
@@ -622,13 +660,51 @@ if page == "Tải dữ liệu":
                 st.pyplot(fig)
                 plt.close()
 
+            elif data_type == 'SpectralContainer' or (hasattr(st.session_state.data, 'spectral_data') and hasattr(st.session_state.data.spectral_data, 'shape') and len(st.session_state.data.spectral_data.shape) > 1):
+                # SpectralContainer hoặc multi-spectrum data
+                if hasattr(st.session_state.data, 'spectral_data'):
+                    n_spectra = min(5, len(st.session_state.data.spectral_data))
+                else:
+                    n_spectra = min(5, len(st.session_state.data))
+
+                colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
+
+                fig, ax = plt.subplots(figsize=(10, 4), dpi=150)
+                for i in range(n_spectra):
+                    # Get spectrum
+                    if hasattr(st.session_state.data, 'spectral_data'):
+                        y_data = st.session_state.data.spectral_data[i]
+                        x_data = st.session_state.data.spectral_axis if hasattr(st.session_state.data, 'spectral_axis') else np.arange(len(y_data))
+                    else:
+                        spec = st.session_state.data[i]
+                        if hasattr(spec, 'spectral_axis') and hasattr(spec, 'spectral_data'):
+                            x_data = spec.spectral_axis
+                            y_data = spec.spectral_data
+                        else:
+                            y_data = spec if isinstance(spec, np.ndarray) else np.array(spec)
+                            x_data = np.arange(len(y_data))
+
+                    # Flatten if needed
+                    if hasattr(y_data, 'shape') and len(y_data.shape) > 1:
+                        y_data = y_data.flatten()
+
+                    ax.plot(x_data, y_data, color=colors[i], linewidth=1.5, alpha=0.7, label=f'Phổ {i+1}')
+
+                ax.set_title(f"Preview phổ Raman ({n_spectra} phổ)")
+                ax.set_xlabel("Wavenumber (cm⁻¹)")
+                ax.set_ylabel("Intensity")
+                ax.legend(loc='best', fontsize=8)
+                ax.grid(True, alpha=0.3)
+                st.pyplot(fig)
+                plt.close()
+
             elif hasattr(st.session_state.data, 'flat'):
                 # Volumetric data - plot 5 phổ đầu với màu khác nhau
                 sample_spectra = st.session_state.data.flat[0:5]
                 n_samples = len(sample_spectra)
                 colors = plt.cm.tab10(np.linspace(0, 1, n_samples))
 
-                fig, ax = plt.subplots(figsize=(10, 4))
+                fig, ax = plt.subplots(figsize=(10, 4), dpi=150)
                 for i in range(n_samples):
                     spec = sample_spectra[i]
                     if hasattr(spec, 'spectral_axis') and hasattr(spec, 'spectral_data'):
@@ -643,36 +719,10 @@ if page == "Tải dữ liệu":
                 st.pyplot(fig)
                 plt.close()
 
-            elif hasattr(st.session_state.data, '__len__') and len(st.session_state.data.shape) > 1:
-                # Multi-spectrum data - plot với màu khác nhau
-                n_spectra = min(5, len(st.session_state.data))
-                colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
-
-                fig, ax = plt.subplots(figsize=(10, 4))
-                for i in range(n_spectra):
-                    spec = st.session_state.data[i]
-                    if hasattr(spec, 'spectral_axis') and hasattr(spec, 'spectral_data'):
-                        ax.plot(spec.spectral_axis, spec.spectral_data,
-                               color=colors[i], linewidth=1.5, alpha=0.7, label=f'Phổ {i+1}')
-                    elif hasattr(st.session_state.data, 'spectral_axis'):
-                        # SpectralContainer với spectral_axis chung
-                        y_data = spec if isinstance(spec, np.ndarray) else np.array(spec)
-                        if len(y_data.shape) > 1:
-                            y_data = y_data.flatten()
-                        ax.plot(st.session_state.data.spectral_axis, y_data,
-                               color=colors[i], linewidth=1.5, alpha=0.7, label=f'Phổ {i+1}')
-
-                ax.set_title(f"Preview phổ Raman ({n_spectra} phổ đầu)")
-                ax.set_xlabel("Wavenumber (cm⁻¹)")
-                ax.set_ylabel("Intensity")
-                ax.legend(loc='best', fontsize=8)
-                ax.grid(True, alpha=0.3)
-                st.pyplot(fig)
-                plt.close()
             else:
                 # Fallback
                 sample_spectra = st.session_state.data
-                fig, ax = plt.subplots(figsize=(10, 4))
+                fig, ax = plt.subplots(figsize=(10, 4), dpi=150)
                 rp.plot.spectra(sample_spectra, ax=ax, plot_type='single')
                 ax.set_title("Preview phổ Raman")
                 ax.set_xlabel("Wavenumber (cm⁻¹)")
@@ -683,6 +733,7 @@ if page == "Tải dữ liệu":
 
         except Exception as e:
             st.error(f"Không thể hiển thị preview: {str(e)}")
+            st.info(f"Debug: Data type = {type(st.session_state.data).__name__}")
 
 # ==================== TRANG TIỀN XỬ LÝ ====================
 elif page == "Tiền xử lý":
@@ -932,7 +983,7 @@ elif page == "Tiền xử lý":
 
             with col_before:
                 st.write("**Trước xử lý**")
-                fig1, ax1 = plt.subplots(figsize=(6, 4))
+                fig1, ax1 = plt.subplots(figsize=(6, 4), dpi=150)
 
                 # Plot trực tiếp với matplotlib để tránh lỗi indexing
                 if hasattr(raw_spectrum, 'spectral_axis') and hasattr(raw_spectrum, 'spectral_data'):
@@ -944,12 +995,11 @@ elif page == "Tiền xử lý":
 
                 ax1.set_title("Phổ gốc")
                 ax1.grid(True, alpha=0.3)
-                st.pyplot(fig1)
-                plt.close()
+                plot_with_download(fig1, "raw_spectrum.png", "📥 Tải phổ gốc")
 
             with col_after:
                 st.write("**Sau xử lý**")
-                fig2, ax2 = plt.subplots(figsize=(6, 4))
+                fig2, ax2 = plt.subplots(figsize=(6, 4), dpi=150)
 
                 # Plot trực tiếp với matplotlib để tránh lỗi indexing
                 if hasattr(processed_spectrum, 'spectral_axis') and hasattr(processed_spectrum, 'spectral_data'):
@@ -961,11 +1011,38 @@ elif page == "Tiền xử lý":
 
                 ax2.set_title("Phổ đã xử lý")
                 ax2.grid(True, alpha=0.3)
-                st.pyplot(fig2)
-                plt.close()
+                plot_with_download(fig2, "preprocessed_spectrum.png", "📥 Tải phổ đã xử lý")
 
         except Exception as e:
             st.error(f"Lỗi khi hiển thị so sánh: {str(e)}")
+
+        # CSV Export cho preprocessing data
+        st.markdown("---")
+        st.write("### 📥 Tải dữ liệu tiền xử lý")
+
+        col_csv1, col_csv2 = st.columns(2)
+
+        with col_csv1:
+            st.write("**Phổ gốc**")
+            if hasattr(raw_spectrum, 'spectral_axis') and hasattr(raw_spectrum, 'spectral_data'):
+                raw_df = pd.DataFrame({
+                    'Wavenumber (cm⁻¹)': raw_spectrum.spectral_axis,
+                    'Intensity': raw_spectrum.spectral_data
+                })
+                create_csv_download(raw_df, "raw_spectrum.csv", "📥 Tải phổ gốc CSV")
+            else:
+                st.info("Không thể export dữ liệu này")
+
+        with col_csv2:
+            st.write("**Phổ đã xử lý**")
+            if hasattr(processed_spectrum, 'spectral_axis') and hasattr(processed_spectrum, 'spectral_data'):
+                processed_df = pd.DataFrame({
+                    'Wavenumber (cm⁻¹)': processed_spectrum.spectral_axis,
+                    'Intensity': processed_spectrum.spectral_data
+                })
+                create_csv_download(processed_df, "preprocessed_spectrum.csv", "📥 Tải phổ đã xử lý CSV")
+            else:
+                st.info("Không thể export dữ liệu này")
 
     # Overlay plots cho batch preprocessing
     if len(st.session_state.spectra_collection) > 0:
@@ -979,7 +1056,7 @@ elif page == "Tiền xử lý":
 
             try:
                 # Tạo figure với 2 subplots
-                fig, (ax_raw, ax_processed) = plt.subplots(1, 2, figsize=(14, 5))
+                fig, (ax_raw, ax_processed) = plt.subplots(1, 2, figsize=(14, 5), dpi=150)
 
                 # Colormap cho màu sắc đẹp
                 colors = plt.cm.tab10(np.linspace(0, 1, len(selected_in_collection)))
@@ -1051,8 +1128,7 @@ elif page == "Tiền xử lý":
                                      fontsize=12, style='italic')
 
                 plt.tight_layout()
-                st.pyplot(fig)
-                plt.close()
+                plot_with_download(fig, "batch_preprocessing_overlay.png", "📥 Tải overlay plots")
 
             except Exception as e:
                 st.error(f"Lỗi khi hiển thị overlay plots: {str(e)}")
@@ -1316,7 +1392,7 @@ elif page == "Trực quan hóa":
 
         # Plot endmembers
         st.write("#### 🔬 Endmembers")
-        fig1, ax1 = plt.subplots(figsize=(12, 6))
+        fig1, ax1 = plt.subplots(figsize=(12, 6), dpi=150)
 
         if hasattr(data, 'spectral_axis'):
             rp.plot.spectra(endmembers, wavenumber_axis=data.spectral_axis, ax=ax1, plot_type='single stacked')
@@ -1324,8 +1400,7 @@ elif page == "Trực quan hóa":
             rp.plot.spectra(endmembers, ax=ax1, plot_type='single stacked')
 
         ax1.set_title("Endmember Spectra")
-        st.pyplot(fig1)
-        plt.close()
+        plot_with_download(fig1, "unmixing_endmembers.png", "📥 Tải Endmembers")
 
         # Plot abundance maps
         st.write("#### 🗺️ Abundance Maps")
@@ -1335,7 +1410,7 @@ elif page == "Trực quan hóa":
             if len(abundance_maps[0].shape) == 3:
                 layer_idx = st.slider("Chọn layer:", 0, abundance_maps[0].shape[2]-1, abundance_maps[0].shape[2]//2)
 
-                fig2, axes = plt.subplots(1, len(abundance_maps), figsize=(4*len(abundance_maps), 4))
+                fig2, axes = plt.subplots(1, len(abundance_maps), figsize=(4*len(abundance_maps), 4), dpi=150)
                 if len(abundance_maps) == 1:
                     axes = [axes]
 
@@ -1344,12 +1419,11 @@ elif page == "Trực quan hóa":
                     ax.set_title(f"Endmember {i+1}")
                     plt.colorbar(im, ax=ax)
 
-                st.pyplot(fig2)
-                plt.close()
+                plot_with_download(fig2, "unmixing_abundance_maps.png", "📥 Tải Abundance Maps")
 
             else:
                 # 2D data
-                fig2, axes = plt.subplots(1, len(abundance_maps), figsize=(4*len(abundance_maps), 4))
+                fig2, axes = plt.subplots(1, len(abundance_maps), figsize=(4*len(abundance_maps), 4), dpi=150)
                 if len(abundance_maps) == 1:
                     axes = [axes]
 
@@ -1358,8 +1432,7 @@ elif page == "Trực quan hóa":
                     ax.set_title(f"Endmember {i+1}")
                     plt.colorbar(im, ax=ax)
 
-                st.pyplot(fig2)
-                plt.close()
+                plot_with_download(fig2, "unmixing_abundance_maps.png", "📥 Tải Abundance Maps")
 
         except Exception as e:
             st.warning(f"Không thể hiển thị abundance maps: {str(e)}")
@@ -1371,7 +1444,7 @@ elif page == "Trực quan hóa":
         intensities = results['intensities']
         spectral_axis = results['spectral_axis']
 
-        fig, ax = plt.subplots(figsize=(12, 6))
+        fig, ax = plt.subplots(figsize=(12, 6), dpi=150)
 
         # Plot spectrum
         ax.plot(spectral_axis, intensities, 'b-', linewidth=1.5, label='Spectrum')
@@ -1389,8 +1462,7 @@ elif page == "Trực quan hóa":
         ax.legend()
         ax.grid(True, alpha=0.3)
 
-        st.pyplot(fig)
-        plt.close()
+        plot_with_download(fig, "peak_detection.png", "📥 Tải Peak Detection")
 
         # Bảng thông tin peaks
         st.write("#### 📋 Danh sách Peaks")
@@ -1404,6 +1476,10 @@ elif page == "Trực quan hóa":
         import pandas as pd
         df = pd.DataFrame(peak_data)
         st.dataframe(df, use_container_width=True)
+
+        # CSV Export for peak detection
+        st.markdown("---")
+        create_csv_download(df, "peak_detection.csv", "📥 Tải Peak Detection CSV")
 
     elif result_type == 'pca':
         st.write("### Kết quả PCA")
@@ -1444,13 +1520,12 @@ elif page == "Trực quan hóa":
         with col1:
             # Scree plot
             st.write("#### 📊 Explained Variance")
-            fig1, ax1 = plt.subplots(figsize=(6, 4))
+            fig1, ax1 = plt.subplots(figsize=(6, 4), dpi=150)
             ax1.bar(range(1, len(explained_variance)+1), explained_variance * 100)
             ax1.set_xlabel('Principal Component')
             ax1.set_ylabel('Explained Variance (%)')
             ax1.set_title('Scree Plot')
-            st.pyplot(fig1)
-            plt.close()
+            plot_with_download(fig1, "pca_scree_plot.png", "📥 Tải Scree Plot")
 
         with col2:
             # Score plot với màu sắc và legend
@@ -1466,7 +1541,7 @@ elif page == "Trực quan hóa":
                     pc_y = st.selectbox("Trục Y:", [f"PC{i+1}" for i in range(n_components)], index=1, key="pc_y_select")
                     pc_y_idx = int(pc_y.replace("PC", "")) - 1
 
-                fig2, ax2 = plt.subplots(figsize=(6, 4))
+                fig2, ax2 = plt.subplots(figsize=(6, 4), dpi=150)
 
                 # Số phổ
                 n_spectra = len(scores)
@@ -1485,8 +1560,7 @@ elif page == "Trực quan hóa":
                 ax2.set_title(f'Score Plot: {pc_x} vs {pc_y}')
                 ax2.legend(loc='best', fontsize=9, framealpha=0.9)
                 ax2.grid(True, alpha=0.3)
-                st.pyplot(fig2)
-                plt.close()
+                plot_with_download(fig2, f"pca_score_{pc_x}_vs_{pc_y}.png", "📥 Tải Score Plot")
             else:
                 st.warning("Cần ít nhất 2 components để plot Score Plot")
 
@@ -1501,7 +1575,7 @@ elif page == "Trực quan hóa":
 
                 # Tính số plots
                 n_plots = min(4, n_components)  # Tối đa 4 PCs để không quá nhiều plots
-                fig_matrix, axes_matrix = plt.subplots(n_plots-1, n_plots-1, figsize=(4*(n_plots-1), 4*(n_plots-1)))
+                fig_matrix, axes_matrix = plt.subplots(n_plots-1, n_plots-1, figsize=(4*(n_plots-1), 4*(n_plots-1)), dpi=150)
 
                 n_spectra = len(scores)
                 colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
@@ -1537,8 +1611,7 @@ elif page == "Trực quan hóa":
                                 ax.legend(loc='best', fontsize=7, framealpha=0.9)
 
                 plt.tight_layout()
-                st.pyplot(fig_matrix)
-                plt.close()
+                plot_with_download(fig_matrix, "pca_score_matrix.png", "📥 Tải Score Matrix")
 
         # Loading plot - hiển thị TẤT CẢ components
         st.markdown("---")
@@ -1549,7 +1622,7 @@ elif page == "Trực quan hóa":
         n_cols = min(3, n_components)  # Tối đa 3 cột
         n_rows = (n_components + n_cols - 1) // n_cols  # Làm tròn lên
 
-        fig3, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+        fig3, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows), dpi=150)
 
         # Flatten axes để dễ iterate
         if n_components == 1:
@@ -1572,8 +1645,41 @@ elif page == "Trực quan hóa":
             axes[i].set_visible(False)
 
         plt.tight_layout()
-        st.pyplot(fig3)
-        plt.close()
+        plot_with_download(fig3, "pca_loadings.png", "📥 Tải Loading Plots")
+
+        # CSV Export cho PCA
+        st.markdown("---")
+        st.write("### 📥 Tải dữ liệu PCA")
+
+        col_csv1, col_csv2, col_csv3 = st.columns(3)
+
+        with col_csv1:
+            st.write("**Scores**")
+            # Tạo DataFrame cho scores
+            score_columns = [f'PC{i+1}' for i in range(n_components)]
+            score_labels = [spectrum_names[i] if i < len(spectrum_names) else f'Phổ {i+1}' for i in range(len(scores))]
+            scores_df = pd.DataFrame(scores, columns=score_columns, index=score_labels)
+            scores_df.insert(0, 'Spectrum', score_labels)
+            create_csv_download(scores_df, "pca_scores.csv", "📥 Tải Scores CSV")
+
+        with col_csv2:
+            st.write("**Loadings**")
+            # Tạo DataFrame cho loadings
+            loading_columns = [f'Feature_{i+1}' for i in range(loadings.shape[1])]
+            loading_labels = [f'PC{i+1}' for i in range(n_components)]
+            loadings_df = pd.DataFrame(loadings, columns=loading_columns, index=loading_labels)
+            loadings_df.insert(0, 'Component', loading_labels)
+            create_csv_download(loadings_df, "pca_loadings.csv", "📥 Tải Loadings CSV")
+
+        with col_csv3:
+            st.write("**Explained Variance**")
+            # Tạo DataFrame cho explained variance
+            var_df = pd.DataFrame({
+                'Component': [f'PC{i+1}' for i in range(len(explained_variance))],
+                'Explained Variance (%)': explained_variance * 100,
+                'Cumulative (%)': np.cumsum(explained_variance) * 100
+            })
+            create_csv_download(var_df, "pca_explained_variance.csv", "📥 Tải Variance CSV")
 
 # Footer
 st.markdown("---")
