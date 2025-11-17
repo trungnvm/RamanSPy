@@ -53,6 +53,8 @@ if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = None
 if 'spectra_collection' not in st.session_state:
     st.session_state.spectra_collection = []  # List of {'name': str, 'data': Spectrum, 'preprocessed': None}
+if 'processed_file_ids' not in st.session_state:
+    st.session_state.processed_file_ids = set()  # Track which files have been added to avoid duplicates
 
 # Sidebar - Navigation
 st.sidebar.title("📋 Menu")
@@ -131,11 +133,24 @@ if page == "Tải dữ liệu":
         else:
             st.caption("⚠️ Files sẽ KHÔNG được thêm vào Collection - bạn phải thêm thủ công")
 
+        # Hiển thị số files đã được xử lý
+        if len(st.session_state.processed_file_ids) > 0:
+            st.info(f"📊 Đã xử lý {len(st.session_state.processed_file_ids)} file(s) trong session này. Mỗi file chỉ được thêm vào Collection 1 lần duy nhất.")
+
         if uploaded_files:
             loaded_count = 0
             failed_files = []
 
             for uploaded_file in uploaded_files:
+                # Tạo unique ID cho file (dựa trên tên file + kích thước + file_id nếu có)
+                file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+                if hasattr(uploaded_file, 'file_id'):
+                    file_id = f"{uploaded_file.file_id}_{uploaded_file.name}_{uploaded_file.size}"
+
+                # Kiểm tra xem file đã được xử lý chưa
+                if file_id in st.session_state.processed_file_ids:
+                    continue  # Skip file này vì đã xử lý rồi
+
                 try:
                     # Lưu file tạm
                     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
@@ -223,6 +238,9 @@ if page == "Tải dữ liệu":
                             'preprocessed': None,
                             'selected': True
                         })
+
+                    # Đánh dấu file này đã được xử lý
+                    st.session_state.processed_file_ids.add(file_id)
 
                     loaded_count += 1
 
@@ -396,7 +414,7 @@ if page == "Tải dữ liệu":
             st.markdown("")  # Spacing
 
             # Selection mode
-            col_mode1, col_mode2 = st.columns(2)
+            col_mode1, col_mode2, col_mode3, col_mode4 = st.columns(4)
             with col_mode1:
                 if st.button("✅ Chọn tất cả"):
                     for spec in st.session_state.spectra_collection:
@@ -406,6 +424,16 @@ if page == "Tải dữ liệu":
                 if st.button("☐ Bỏ chọn tất cả"):
                     for spec in st.session_state.spectra_collection:
                         spec['selected'] = False
+                    st.rerun()
+            with col_mode3:
+                if st.button("🗑️ Xóa tất cả"):
+                    st.session_state.spectra_collection = []
+                    st.session_state.processed_file_ids = set()
+                    st.rerun()
+            with col_mode4:
+                if st.button("🔄 Reset cache"):
+                    st.session_state.processed_file_ids = set()
+                    st.info("Đã xóa cache upload")
                     st.rerun()
 
             # List spectra với rename
