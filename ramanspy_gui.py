@@ -51,6 +51,8 @@ if 'pipeline_steps' not in st.session_state:
     st.session_state.pipeline_steps = []
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = None
+if 'spectra_collection' not in st.session_state:
+    st.session_state.spectra_collection = []  # List of {'name': str, 'data': Spectrum, 'preprocessed': None}
 
 # Sidebar - Navigation
 st.sidebar.title("📋 Menu")
@@ -291,6 +293,131 @@ if page == "Tải dữ liệu":
 
                 st.success(f"✅ Đã tạo {n_spectra} phổ tổng hợp với {n_points} điểm")
 
+    # ==================== QUẢN LÝ NHIỀU PHỔ ====================
+    st.markdown("---")
+    with st.expander("📚 Quản lý Collection Phổ (để chạy PCA với nhiều phổ)", expanded=False):
+        st.write("### Thêm phổ hiện tại vào collection")
+
+        col_name, col_add = st.columns([3, 1])
+
+        with col_name:
+            spectrum_name = st.text_input(
+                "Tên phổ:",
+                value=f"Spectrum_{len(st.session_state.spectra_collection)+1}",
+                help="Đặt tên để dễ quản lý"
+            )
+
+        with col_add:
+            st.write("")  # Spacing
+            st.write("")  # Spacing
+            if st.button("➕ Thêm vào Collection"):
+                if st.session_state.data is not None:
+                    # Kiểm tra trùng tên
+                    existing_names = [s['name'] for s in st.session_state.spectra_collection]
+                    if spectrum_name in existing_names:
+                        st.error(f"❌ Tên '{spectrum_name}' đã tồn tại!")
+                    else:
+                        st.session_state.spectra_collection.append({
+                            'name': spectrum_name,
+                            'data': st.session_state.data,
+                            'preprocessed': st.session_state.preprocessed_data,
+                            'selected': True
+                        })
+                        st.success(f"✅ Đã thêm '{spectrum_name}' vào collection!")
+                        st.rerun()
+                else:
+                    st.warning("⚠️ Chưa có dữ liệu để thêm. Vui lòng tải file trước!")
+
+        # Hiển thị collection
+        if len(st.session_state.spectra_collection) > 0:
+            st.write(f"### 📋 Collection ({len(st.session_state.spectra_collection)} phổ)")
+
+            # Selection mode
+            col_mode1, col_mode2 = st.columns(2)
+            with col_mode1:
+                if st.button("✅ Chọn tất cả"):
+                    for spec in st.session_state.spectra_collection:
+                        spec['selected'] = True
+                    st.rerun()
+            with col_mode2:
+                if st.button("☐ Bỏ chọn tất cả"):
+                    for spec in st.session_state.spectra_collection:
+                        spec['selected'] = False
+                    st.rerun()
+
+            # List spectra
+            for i, spec in enumerate(st.session_state.spectra_collection):
+                col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
+
+                with col1:
+                    new_selected = st.checkbox(
+                        "Chọn",
+                        value=spec['selected'],
+                        key=f"select_{i}",
+                        label_visibility="collapsed"
+                    )
+                    if new_selected != spec['selected']:
+                        spec['selected'] = new_selected
+
+                with col2:
+                    data_shape = spec['data'].shape if hasattr(spec['data'], 'shape') else "N/A"
+                    preprocessed_status = "✓ Đã xử lý" if spec['preprocessed'] is not None else "○ Chưa xử lý"
+                    st.write(f"**{spec['name']}** - {data_shape} - {preprocessed_status}")
+
+                with col3:
+                    if st.button("🗑️", key=f"del_{i}", help="Xóa phổ này"):
+                        st.session_state.spectra_collection.pop(i)
+                        st.rerun()
+
+                with col4:
+                    if st.button("👁️", key=f"view_{i}", help="Xem phổ này"):
+                        st.session_state.data = spec['data']
+                        st.session_state.preprocessed_data = spec['preprocessed']
+                        st.success(f"Đã load '{spec['name']}'")
+                        st.rerun()
+
+            # Actions
+            st.markdown("---")
+            selected_count = sum(1 for s in st.session_state.spectra_collection if s['selected'])
+            st.info(f"**Đã chọn:** {selected_count} phổ")
+
+            if selected_count > 1:
+                if st.button("🔗 Kết hợp phổ đã chọn (để chạy PCA)", type="primary"):
+                    # Combine selected spectra into SpectralContainer
+                    selected_spectra = [s['data'] for s in st.session_state.spectra_collection if s['selected']]
+
+                    try:
+                        # Stack spectra
+                        spectra_arrays = []
+                        for spec in selected_spectra:
+                            if hasattr(spec, 'spectral_data'):
+                                spectra_arrays.append(spec.spectral_data)
+                            else:
+                                spectra_arrays.append(np.array(spec))
+
+                        combined_array = np.stack(spectra_arrays)
+
+                        # Get common spectral axis (from first spectrum)
+                        if hasattr(selected_spectra[0], 'spectral_axis'):
+                            spectral_axis = selected_spectra[0].spectral_axis
+                        else:
+                            spectral_axis = np.arange(combined_array.shape[-1])
+
+                        # Create SpectralContainer
+                        st.session_state.data = rp.SpectralContainer(combined_array, spectral_axis=spectral_axis)
+                        st.session_state.preprocessed_data = None
+
+                        st.success(f"✅ Đã kết hợp {selected_count} phổ! Giờ bạn có thể chạy PCA.")
+                        st.info("💡 Chuyển sang tab 'Phân tích' để chạy PCA với dữ liệu kết hợp.")
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(f"❌ Lỗi khi kết hợp phổ: {str(e)}")
+            elif selected_count == 1:
+                st.info("💡 Chỉ chọn 1 phổ. Sử dụng Peak Detection để phân tích phổ đơn.")
+        else:
+            st.info("Collection trống. Tải file và click '➕ Thêm vào Collection' để bắt đầu.")
+
     # Preview dữ liệu nếu đã load
     if st.session_state.data is not None:
         st.markdown("---")
@@ -350,7 +477,10 @@ elif page == "Tiền xử lý":
         st.write("**Bước 2: Loại bỏ Cosmic Ray**")
         use_despike = st.checkbox("Sử dụng Despike", value=True)
         if use_despike:
-            st.info("💡 Sử dụng phương pháp WhitakerHayes")
+            st.write("Phương pháp: **WhitakerHayes**")
+            with st.expander("⚙️ Tùy chỉnh parameters"):
+                despike_kernel = st.slider("Kernel size:", 1, 9, 3, 2, help="Kích thước kernel để detect spikes")
+                despike_threshold = st.slider("Threshold:", 1.0, 20.0, 8.0, 1.0, help="Ngưỡng để xác định spike")
 
     col3, col4 = st.columns([1, 1])
 
@@ -407,7 +537,10 @@ elif page == "Tiền xử lý":
                         steps.append(rp.preprocessing.misc.Cropper(region=(crop_min, crop_max)))
 
                     if use_despike:
-                        steps.append(rp.preprocessing.despike.WhitakerHayes())
+                        steps.append(rp.preprocessing.despike.WhitakerHayes(
+                            kernel_size=despike_kernel,
+                            threshold=despike_threshold
+                        ))
 
                     if use_denoise:
                         if denoise_method == "SavGol":
