@@ -884,6 +884,96 @@ elif page == "Tiền xử lý":
         except Exception as e:
             st.error(f"Lỗi khi hiển thị so sánh: {str(e)}")
 
+    # Overlay plots cho batch preprocessing
+    if len(st.session_state.spectra_collection) > 0:
+        selected_in_collection = [s for s in st.session_state.spectra_collection if s['selected']]
+        preprocessed_count = sum(1 for s in selected_in_collection if s['preprocessed'] is not None)
+
+        if len(selected_in_collection) > 1 and preprocessed_count > 0:
+            st.markdown("---")
+            st.write("### 📊 So sánh chồng phổ (Overlay)")
+            st.info(f"Hiển thị {len(selected_in_collection)} phổ đã chọn trong Collection ({preprocessed_count} đã xử lý)")
+
+            try:
+                # Tạo figure với 2 subplots
+                fig, (ax_raw, ax_processed) = plt.subplots(1, 2, figsize=(14, 5))
+
+                # Colormap cho màu sắc đẹp
+                colors = plt.cm.tab10(np.linspace(0, 1, len(selected_in_collection)))
+
+                # Plot raw spectra (bên trái)
+                ax_raw.set_title("Phổ gốc (Raw Spectra)", fontsize=12, fontweight='bold')
+                ax_raw.set_xlabel("Wavenumber (cm⁻¹)")
+                ax_raw.set_ylabel("Intensity")
+                ax_raw.grid(True, alpha=0.3)
+
+                for idx, item in enumerate(selected_in_collection):
+                    raw_spec = item['data']
+
+                    # Extract data safely
+                    if hasattr(raw_spec, 'spectral_axis') and hasattr(raw_spec, 'spectral_data'):
+                        x_data = raw_spec.spectral_axis
+                        y_data = raw_spec.spectral_data
+                    elif hasattr(raw_spec, 'spectral_axis'):
+                        x_data = raw_spec.spectral_axis
+                        y_data = np.array(raw_spec)
+                    else:
+                        y_data = np.array(raw_spec)
+                        x_data = np.arange(len(y_data))
+
+                    # Flatten if needed
+                    if len(y_data.shape) > 1:
+                        y_data = y_data.flatten()
+
+                    ax_raw.plot(x_data, y_data, color=colors[idx], linewidth=1.5, alpha=0.7, label=item['name'])
+
+                ax_raw.legend(loc='best', fontsize=8, framealpha=0.9)
+
+                # Plot preprocessed spectra (bên phải)
+                ax_processed.set_title("Phổ đã xử lý (Preprocessed Spectra)", fontsize=12, fontweight='bold')
+                ax_processed.set_xlabel("Wavenumber (cm⁻¹)")
+                ax_processed.set_ylabel("Intensity")
+                ax_processed.grid(True, alpha=0.3)
+
+                preprocessed_items = [item for item in selected_in_collection if item['preprocessed'] is not None]
+
+                if len(preprocessed_items) > 0:
+                    # Re-create colors for preprocessed items
+                    proc_colors = plt.cm.tab10(np.linspace(0, 1, len(preprocessed_items)))
+
+                    for idx, item in enumerate(preprocessed_items):
+                        proc_spec = item['preprocessed']
+
+                        # Extract data safely
+                        if hasattr(proc_spec, 'spectral_axis') and hasattr(proc_spec, 'spectral_data'):
+                            x_data = proc_spec.spectral_axis
+                            y_data = proc_spec.spectral_data
+                        elif hasattr(proc_spec, 'spectral_axis'):
+                            x_data = proc_spec.spectral_axis
+                            y_data = np.array(proc_spec)
+                        else:
+                            y_data = np.array(proc_spec)
+                            x_data = np.arange(len(y_data))
+
+                        # Flatten if needed
+                        if len(y_data.shape) > 1:
+                            y_data = y_data.flatten()
+
+                        ax_processed.plot(x_data, y_data, color=proc_colors[idx], linewidth=1.5, alpha=0.7, label=item['name'])
+
+                    ax_processed.legend(loc='best', fontsize=8, framealpha=0.9)
+                else:
+                    ax_processed.text(0.5, 0.5, 'Chưa có phổ nào được xử lý',
+                                     ha='center', va='center', transform=ax_processed.transAxes,
+                                     fontsize=12, style='italic')
+
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close()
+
+            except Exception as e:
+                st.error(f"Lỗi khi hiển thị overlay plots: {str(e)}")
+
 # ==================== TRANG PHÂN TÍCH ====================
 elif page == "Phân tích":
     st.markdown('<p class="sub-header">🔬 Phân tích phổ</p>', unsafe_allow_html=True)
