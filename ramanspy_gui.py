@@ -1207,6 +1207,139 @@ elif page == "Tiền xử lý":
             except Exception as e:
                 st.error(f"Lỗi khi hiển thị overlay plots: {str(e)}")
 
+        # Stacked plots cho batch preprocessing
+        if len(selected_in_collection) > 1:
+            st.markdown("---")
+            st.write("### 📚 So sánh phổ dạng Stacked")
+            st.info("Stacked plot giúp so sánh từng phổ riêng lẻ bằng cách xếp chồng với offset theo trục Y")
+
+            # Options
+            col_opt1, col_opt2, col_opt3 = st.columns([2, 2, 1])
+
+            with col_opt1:
+                stack_mode = st.radio(
+                    "Chọn dữ liệu:",
+                    ["Phổ gốc", "Phổ đã xử lý", "So sánh cả 2"],
+                    horizontal=True
+                )
+
+            with col_opt2:
+                offset_multiplier = st.slider(
+                    "Khoảng cách giữa các phổ:",
+                    min_value=0.5,
+                    max_value=3.0,
+                    value=1.0,
+                    step=0.1,
+                    help="Điều chỉnh khoảng cách offset giữa các phổ"
+                )
+
+            with col_opt3:
+                reverse_order = st.checkbox("Đảo ngược thứ tự", value=False)
+
+            try:
+                if stack_mode == "So sánh cả 2":
+                    fig, (ax_raw_stack, ax_proc_stack) = plt.subplots(1, 2, figsize=(14, 8), dpi=150)
+                    axes_list = [ax_raw_stack, ax_proc_stack]
+                    titles = ["Phổ gốc (Stacked)", "Phổ đã xử lý (Stacked)"]
+                else:
+                    fig, ax = plt.subplots(1, 1, figsize=(10, 8), dpi=150)
+                    axes_list = [ax]
+                    titles = [f"{stack_mode} (Stacked)"]
+
+                colors = plt.cm.tab10(np.linspace(0, 1, len(selected_in_collection)))
+
+                # Determine order
+                items_to_plot = list(reversed(selected_in_collection)) if reverse_order else selected_in_collection
+
+                for ax_idx, ax_current in enumerate(axes_list):
+                    # Determine which data to use
+                    if stack_mode == "Phổ gốc" or (stack_mode == "So sánh cả 2" and ax_idx == 0):
+                        use_raw = True
+                    else:
+                        use_raw = False
+
+                    # Filter items based on data availability
+                    if use_raw:
+                        items = items_to_plot
+                    else:
+                        items = [item for item in items_to_plot if item['preprocessed'] is not None]
+
+                    if len(items) == 0:
+                        ax_current.text(0.5, 0.5, 'Không có dữ liệu để hiển thị',
+                                      ha='center', va='center', transform=ax_current.transAxes,
+                                      fontsize=12, style='italic')
+                        ax_current.set_title(titles[ax_idx], fontsize=12, fontweight='bold')
+                        continue
+
+                    # Calculate offset
+                    max_intensity = 0
+                    all_intensities = []
+                    for item in items:
+                        spec = item['data'] if use_raw else item['preprocessed']
+                        if hasattr(spec, 'spectral_data'):
+                            y = spec.spectral_data
+                        else:
+                            y = np.array(spec)
+                        if len(y.shape) > 1:
+                            y = y.flatten()
+                        all_intensities.append(y)
+                        max_intensity = max(max_intensity, np.max(y) - np.min(y))
+
+                    offset = max_intensity * offset_multiplier
+
+                    # Plot each spectrum with offset
+                    for idx, item in enumerate(items):
+                        spec = item['data'] if use_raw else item['preprocessed']
+
+                        # Extract data safely
+                        if hasattr(spec, 'spectral_axis') and hasattr(spec, 'spectral_data'):
+                            x_data = spec.spectral_axis
+                            y_data = spec.spectral_data
+                        elif hasattr(spec, 'spectral_axis'):
+                            x_data = spec.spectral_axis
+                            y_data = np.array(spec)
+                        else:
+                            y_data = np.array(spec)
+                            x_data = np.arange(len(y_data))
+
+                        # Flatten if needed
+                        if len(y_data.shape) > 1:
+                            y_data = y_data.flatten()
+
+                        # Apply offset
+                        y_offset = y_data + (idx * offset)
+
+                        # Find color index in original list
+                        original_idx = selected_in_collection.index(item)
+                        color = colors[original_idx]
+
+                        # Plot
+                        ax_current.plot(x_data, y_offset, color=color, linewidth=1.2, alpha=0.9, label=item['name'])
+
+                        # Add text label
+                        mid_idx = len(x_data) // 2
+                        ax_current.text(x_data[mid_idx], y_offset[mid_idx], f"  {item['name']}",
+                                      fontsize=8, va='center', color=color, fontweight='bold')
+
+                    ax_current.set_title(titles[ax_idx], fontsize=12, fontweight='bold')
+                    ax_current.set_xlabel("Wavenumber (cm⁻¹)")
+                    ax_current.set_ylabel("Intensity (offset)")
+                    ax_current.grid(True, alpha=0.2, axis='x')
+                    ax_current.legend(loc='upper right', fontsize=8, framealpha=0.9)
+
+                plt.tight_layout()
+
+                # Download button
+                if stack_mode == "So sánh cả 2":
+                    plot_with_download(fig, "batch_stacked_comparison.png", "📥 Tải Stacked Plots")
+                elif stack_mode == "Phổ gốc":
+                    plot_with_download(fig, "batch_stacked_raw.png", "📥 Tải Stacked Plot")
+                else:
+                    plot_with_download(fig, "batch_stacked_preprocessed.png", "📥 Tải Stacked Plot")
+
+            except Exception as e:
+                st.error(f"Lỗi khi hiển thị stacked plots: {str(e)}")
+
 # ==================== TRANG PHÂN TÍCH ====================
 elif page == "Phân tích":
     st.markdown('<p class="sub-header">🔬 Phân tích phổ</p>', unsafe_allow_html=True)
