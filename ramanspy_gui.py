@@ -553,81 +553,19 @@ if page == "Tải dữ liệu":
             if selected_count > 0:
                 # Batch preprocessing section
                 st.write("#### ⚙️ Tiền xử lý hàng loạt")
-                col_prep1, col_prep2 = st.columns([2, 1])
+                st.info("💡 Chuyển sang tab **'Tiền xử lý'** để:")
+                st.markdown("""
+                1. Thiết lập pipeline tiền xử lý
+                2. Click **'⚙️ Áp dụng cho Collection'** để xử lý hàng loạt
+                3. Click **'🔗 Kết hợp phổ'** để tạo SpectralContainer cho PCA
+                """)
 
-                with col_prep1:
-                    st.info("💡 Chuyển sang tab **'Tiền xử lý'**, thiết lập pipeline, rồi click nút **'⚙️ Áp dụng cho Collection'**")
-
-                with col_prep2:
+                col_quick = st.columns(1)[0]
+                with col_quick:
                     # Quick access button
-                    if st.button("📍 Đi tới Tiền xử lý", use_container_width=True):
+                    if st.button("📍 Đi tới Tiền xử lý", use_container_width=True, type="primary"):
                         st.session_state['show_batch_hint'] = True
-                        st.info("Chuyển sang tab 'Tiền xử lý' bên trên để thiết lập pipeline!")
-
-                st.markdown("---")
-
-                # Combine section
-                st.write("#### 🔗 Kết hợp phổ để phân tích")
-                col_action1, col_action2 = st.columns([2, 1])
-
-                with col_action1:
-                    if selected_count > 1:
-                        # Hiển thị warning nếu có phổ chưa xử lý
-                        if selected_raw > 0:
-                            st.warning(f"⚠️ Có {selected_raw} phổ chưa tiền xử lý. Khuyến nghị xử lý trước khi kết hợp.")
-                        else:
-                            st.success(f"✅ Tất cả {selected_count} phổ đã được tiền xử lý!")
-
-                with col_action2:
-                    # Combine spectra
-                    if selected_count > 1:
-                        if st.button("🔗 Kết hợp phổ", type="primary", use_container_width=True):
-                            # Get selected items
-                            selected_items = [s for s in st.session_state.spectra_collection if s['selected']]
-
-                            try:
-                                # Ưu tiên dùng preprocessed data nếu có
-                                spectra_arrays = []
-                                using_preprocessed = False
-
-                                for item in selected_items:
-                                    # Dùng preprocessed nếu có, không thì dùng raw
-                                    spec = item['preprocessed'] if item['preprocessed'] is not None else item['data']
-
-                                    if item['preprocessed'] is not None:
-                                        using_preprocessed = True
-
-                                    if hasattr(spec, 'spectral_data'):
-                                        spectra_arrays.append(spec.spectral_data)
-                                    else:
-                                        spectra_arrays.append(np.array(spec))
-
-                                combined_array = np.stack(spectra_arrays)
-
-                                # Get common spectral axis
-                                first_spec = selected_items[0]['preprocessed'] if selected_items[0]['preprocessed'] is not None else selected_items[0]['data']
-                                if hasattr(first_spec, 'spectral_axis'):
-                                    spectral_axis = first_spec.spectral_axis
-                                else:
-                                    spectral_axis = np.arange(combined_array.shape[-1])
-
-                                # Create SpectralContainer
-                                st.session_state.data = rp.SpectralContainer(combined_array, spectral_axis=spectral_axis)
-                                st.session_state.preprocessed_data = None
-
-                                if using_preprocessed:
-                                    st.success(f"✅ Đã kết hợp {selected_count} phổ (sử dụng dữ liệu đã tiền xử lý)!")
-                                else:
-                                    st.success(f"✅ Đã kết hợp {selected_count} phổ (dữ liệu gốc)!")
-                                    st.warning("⚠️ Một số phổ chưa được tiền xử lý. Khuyến nghị tiền xử lý trước khi phân tích.")
-
-                                st.info("💡 Chuyển sang tab 'Phân tích' để chạy PCA.")
-                                st.rerun()
-
-                            except Exception as e:
-                                st.error(f"❌ Lỗi khi kết hợp phổ: {str(e)}")
-                    else:
-                        st.info("💡 Chọn ít nhất 2 phổ để kết hợp và chạy PCA.")
+                        st.info("Chuyển sang tab 'Tiền xử lý' bên trên!")
 
             elif selected_count == 1:
                 st.info("💡 Chỉ chọn 1 phổ. Sử dụng Peak Detection để phân tích phổ đơn.")
@@ -960,12 +898,80 @@ elif page == "Tiền xử lý":
                         progress_bar.progress(1.0, text="✅ Hoàn thành!")
 
                         st.success(f"✅ Đã xử lý thành công {success_count}/{len(selected_in_collection)} phổ với {len(steps)} bước!")
-                        st.info("💡 Quay lại tab 'Tải dữ liệu' → mở 'Quản lý Collection' để kết hợp phổ và chạy PCA.")
 
                 except Exception as e:
                     st.error(f"❌ Lỗi khi xử lý: {str(e)}")
         else:
             st.info("💡 Chọn phổ trong Collection để xử lý hàng loạt")
+
+    # Combine section - Kết hợp phổ để phân tích (DI CHUYỂN TỪ TAB TẢI DỮ LIỆU)
+    if len(st.session_state.spectra_collection) > 0:
+        selected_in_collection = [s for s in st.session_state.spectra_collection if s['selected']]
+        if len(selected_in_collection) > 1:
+            st.markdown("---")
+            st.write("### 🔗 Kết hợp phổ để phân tích")
+
+            col_combine1, col_combine2 = st.columns([2, 1])
+
+            # Calculate stats
+            selected_preprocessed = sum(1 for s in selected_in_collection if s['preprocessed'] is not None)
+            selected_raw = len(selected_in_collection) - selected_preprocessed
+
+            with col_combine1:
+                # Hiển thị warning nếu có phổ chưa xử lý
+                if selected_raw > 0:
+                    st.warning(f"⚠️ Có {selected_raw} phổ chưa tiền xử lý. Khuyến nghị xử lý trước khi kết hợp.")
+                else:
+                    st.success(f"✅ Tất cả {len(selected_in_collection)} phổ đã được tiền xử lý!")
+                    st.info("💡 Click 'Kết hợp phổ' để tạo SpectralContainer cho PCA")
+
+            with col_combine2:
+                # Combine spectra button
+                if st.button("🔗 Kết hợp phổ", type="primary", use_container_width=True, key="combine_preprocessing"):
+                    # Get selected items
+                    selected_items = [s for s in st.session_state.spectra_collection if s['selected']]
+
+                    try:
+                        # Ưu tiên dùng preprocessed data nếu có
+                        spectra_arrays = []
+                        using_preprocessed = False
+
+                        for item in selected_items:
+                            # Dùng preprocessed nếu có, không thì dùng raw
+                            spec = item['preprocessed'] if item['preprocessed'] is not None else item['data']
+
+                            if item['preprocessed'] is not None:
+                                using_preprocessed = True
+
+                            if hasattr(spec, 'spectral_data'):
+                                spectra_arrays.append(spec.spectral_data)
+                            else:
+                                spectra_arrays.append(np.array(spec))
+
+                        combined_array = np.stack(spectra_arrays)
+
+                        # Get common spectral axis
+                        first_spec = selected_items[0]['preprocessed'] if selected_items[0]['preprocessed'] is not None else selected_items[0]['data']
+                        if hasattr(first_spec, 'spectral_axis'):
+                            spectral_axis = first_spec.spectral_axis
+                        else:
+                            spectral_axis = np.arange(combined_array.shape[-1])
+
+                        # Create SpectralContainer
+                        st.session_state.data = rp.SpectralContainer(combined_array, spectral_axis=spectral_axis)
+                        st.session_state.preprocessed_data = None
+
+                        if using_preprocessed:
+                            st.success(f"✅ Đã kết hợp {len(selected_in_collection)} phổ (sử dụng dữ liệu đã tiền xử lý)!")
+                        else:
+                            st.success(f"✅ Đã kết hợp {len(selected_in_collection)} phổ (dữ liệu gốc)!")
+                            st.warning("⚠️ Một số phổ chưa được tiền xử lý. Khuyến nghị tiền xử lý trước khi phân tích.")
+
+                        st.info("💡 Chuyển sang tab 'Phân tích' để chạy PCA.")
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(f"❌ Lỗi khi kết hợp phổ: {str(e)}")
 
     # So sánh trước/sau
     if st.session_state.preprocessed_data is not None:
