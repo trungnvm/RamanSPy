@@ -1,0 +1,8 @@
+# Requirements cho RamanSPy GUI
+streamlit>=1.28.0
+ramanspy>=0.2.10
+numpy
+matplotlib
+scipy
+scikit-learn
+pandas
