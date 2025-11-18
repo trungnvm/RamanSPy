@@ -737,7 +737,7 @@ elif page == "Tiền xử lý":
         if use_denoise:
             denoise_method = st.selectbox(
                 "Phương pháp khử nhiễu:",
-                ["SavGol", "Gaussian", "Wavelet"]
+                ["SavGol", "Gaussian"]
             )
 
             if denoise_method == "SavGol":
@@ -794,8 +794,6 @@ elif page == "Tiền xử lý":
                             steps.append(rp.preprocessing.denoise.SavGol(window_length=window_length, polyorder=polyorder))
                         elif denoise_method == "Gaussian":
                             steps.append(rp.preprocessing.denoise.Gaussian(sigma=sigma))
-                        else:
-                            steps.append(rp.preprocessing.denoise.Wavelet())
 
                     if use_baseline:
                         if baseline_method == "ASPLS":
@@ -856,8 +854,6 @@ elif page == "Tiền xử lý":
                                 steps.append(rp.preprocessing.denoise.SavGol(window_length=window_length, polyorder=polyorder))
                             elif denoise_method == "Gaussian":
                                 steps.append(rp.preprocessing.denoise.Gaussian(sigma=sigma))
-                            else:
-                                steps.append(rp.preprocessing.denoise.Wavelet())
 
                         if use_baseline:
                             if baseline_method == "ASPLS":
