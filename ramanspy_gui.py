@@ -717,8 +717,8 @@ elif page == "Tiền xử lý":
         st.write("**Bước 1: Cắt vùng phổ (Cropping)**")
         use_cropping = st.checkbox("Sử dụng Cropping", value=True)
         if use_cropping:
-            crop_min = st.number_input("Wavenumber min (cm⁻¹):", 400, 2000, 700, 50)
-            crop_max = st.number_input("Wavenumber max (cm⁻¹):", 400, 2000, 1800, 50)
+            crop_min = st.number_input("Wavenumber min (cm⁻¹):", 0, 4000, 700, 50)
+            crop_max = st.number_input("Wavenumber max (cm⁻¹):", 0, 4000, 1800, 50)
 
     with col2:
         st.write("**Bước 2: Loại bỏ Cosmic Ray**")
