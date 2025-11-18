@@ -49,6 +49,38 @@ def create_csv_download(dataframe, filename="data.csv", label="📥 Tải CSV"):
         use_container_width=True
     )
 
+def get_contrasting_colors(n):
+    """
+    Return array of high-contrast colors avoiding yellow and similar hues.
+    Colors chosen for maximum distinction and visibility.
+    """
+    # High contrast color palette: Red, Blue, Green, Purple, Orange, Magenta, Brown, DarkGreen
+    base_colors = [
+        '#E41A1C',  # Bright Red
+        '#377EB8',  # Blue
+        '#4DAF4A',  # Green
+        '#984EA3',  # Purple
+        '#FF7F00',  # Orange (not yellow)
+        '#F781BF',  # Pink/Magenta
+        '#A65628',  # Brown
+        '#006400',  # Dark Green
+    ]
+
+    if n <= len(base_colors):
+        colors_hex = base_colors[:n]
+    else:
+        # Cycle through if more colors needed
+        colors_hex = (base_colors * ((n // len(base_colors)) + 1))[:n]
+
+    # Convert hex to RGB array for matplotlib
+    colors_rgb = []
+    for hex_color in colors_hex:
+        hex_color = hex_color.lstrip('#')
+        rgb = tuple(int(hex_color[i:i+2], 16)/255.0 for i in (0, 2, 4))
+        colors_rgb.append(rgb)
+
+    return np.array(colors_rgb)
+
 # Cấu hình trang
 st.set_page_config(
     page_title="RamanSPy GUI",
@@ -616,7 +648,7 @@ if page == "Tải dữ liệu":
                 if len(spectrum_labels) == 0:
                     spectrum_labels = [f'Phổ {i+1}' for i in range(n_spectra)]
 
-                colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
+                colors = get_contrasting_colors(n_spectra)
 
                 fig, ax = plt.subplots(figsize=(10, 4), dpi=150)
                 for i in range(n_spectra):
@@ -653,7 +685,7 @@ if page == "Tải dữ liệu":
                 # Volumetric data - plot 5 phổ đầu với màu khác nhau
                 sample_spectra = st.session_state.data.flat[0:5]
                 n_samples = len(sample_spectra)
-                colors = plt.cm.tab10(np.linspace(0, 1, n_samples))
+                colors = get_contrasting_colors(n_samples)
 
                 fig, ax = plt.subplots(figsize=(10, 4), dpi=150)
                 for i in range(n_samples):
@@ -1073,8 +1105,8 @@ elif page == "Tiền xử lý":
                 # Tạo figure với 2 subplots
                 fig, (ax_raw, ax_processed) = plt.subplots(1, 2, figsize=(14, 5), dpi=150)
 
-                # Colormap cho màu sắc đẹp
-                colors = plt.cm.tab10(np.linspace(0, 1, len(selected_in_collection)))
+                # High contrast color palette
+                colors = get_contrasting_colors(len(selected_in_collection))
 
                 # Plot raw spectra (bên trái)
                 ax_raw.set_title("Phổ gốc (Raw Spectra)", fontsize=12, fontweight='bold')
@@ -1113,8 +1145,8 @@ elif page == "Tiền xử lý":
                 preprocessed_items = [item for item in selected_in_collection if item['preprocessed'] is not None]
 
                 if len(preprocessed_items) > 0:
-                    # Re-create colors for preprocessed items
-                    proc_colors = plt.cm.tab10(np.linspace(0, 1, len(preprocessed_items)))
+                    # High contrast colors for preprocessed items
+                    proc_colors = get_contrasting_colors(len(preprocessed_items))
 
                     for idx, item in enumerate(preprocessed_items):
                         proc_spec = item['preprocessed']
@@ -1248,7 +1280,7 @@ elif page == "Tiền xử lý":
                     axes_list = [ax]
                     titles = [f"{stack_mode} (Stacked)"]
 
-                colors = plt.cm.tab10(np.linspace(0, 1, len(selected_in_collection)))
+                colors = get_contrasting_colors(len(selected_in_collection))
 
                 # Determine order
                 items_to_plot = list(reversed(selected_in_collection)) if reverse_order else selected_in_collection
@@ -1765,8 +1797,8 @@ elif page == "Trực quan hóa":
             # Plot all spectra with peaks
             fig, ax = plt.subplots(figsize=(14, 8), dpi=150)
 
-            # Color palette
-            colors = plt.cm.tab10(np.linspace(0, 1, len(all_peaks)))
+            # High contrast color palette
+            colors = get_contrasting_colors(len(all_peaks))
 
             for idx, result in enumerate(all_peaks):
                 peaks = result['peaks']
@@ -1895,9 +1927,9 @@ elif page == "Trực quan hóa":
 
                 fig2, ax2 = plt.subplots(figsize=(6, 4), dpi=150)
 
-                # Số phổ
+                # High contrast colors for spectra
                 n_spectra = len(scores)
-                colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
+                colors = get_contrasting_colors(n_spectra)
 
                 # Plot từng điểm với màu riêng
                 for i in range(n_spectra):
@@ -1930,7 +1962,7 @@ elif page == "Trực quan hóa":
                 fig_matrix, axes_matrix = plt.subplots(n_plots-1, n_plots-1, figsize=(4*(n_plots-1), 4*(n_plots-1)), dpi=150)
 
                 n_spectra = len(scores)
-                colors = plt.cm.tab10(np.linspace(0, 1, n_spectra))
+                colors = get_contrasting_colors(n_spectra)
 
                 for i in range(n_plots-1):
                     for j in range(n_plots-1):
@@ -1984,9 +2016,12 @@ elif page == "Trực quan hóa":
         else:
             axes = axes.flatten()
 
+        # Get colors for loadings
+        loading_colors = get_contrasting_colors(n_components)
+
         for i in range(n_components):
             ax = axes[i]
-            ax.plot(loadings[i], linewidth=1.5, color=plt.cm.tab10(i/10))
+            ax.plot(loadings[i], linewidth=1.5, color=loading_colors[i])
             ax.set_title(f'PC{i+1} Loading ({explained_variance[i]*100:.1f}%)', fontweight='bold')
             ax.set_xlabel('Wavenumber index')
             ax.set_ylabel('Loading')
