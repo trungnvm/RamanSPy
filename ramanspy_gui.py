@@ -1458,6 +1458,38 @@ elif page == "Phân tích":
         st.write("#### Peak Detection")
         st.write("Tìm các peak trong phổ")
 
+        # Check if we have Collection with multiple spectra
+        selected_in_collection = [s for s in st.session_state.spectra_collection if s['selected']]
+        has_collection = len(selected_in_collection) > 0
+
+        # Options for multi-spectrum analysis
+        if has_collection and len(selected_in_collection) > 1:
+            st.info(f"📊 Phát hiện {len(selected_in_collection)} phổ trong Collection")
+
+            col_mode1, col_mode2 = st.columns([2, 1])
+            with col_mode1:
+                peak_mode = st.radio(
+                    "Chế độ phân tích:",
+                    ["Phổ đơn lẻ", "So sánh tất cả phổ"],
+                    horizontal=True,
+                    help="Chọn phân tích một phổ riêng lẻ hoặc xem tất cả peaks cùng lúc"
+                )
+
+            if peak_mode == "Phổ đơn lẻ":
+                spectrum_options = [item['name'] for item in selected_in_collection]
+                selected_spectrum_name = st.selectbox(
+                    "Chọn phổ để phân tích:",
+                    spectrum_options
+                )
+                selected_spectrum_idx = spectrum_options.index(selected_spectrum_name)
+            else:
+                selected_spectrum_idx = None  # Analyze all
+        else:
+            peak_mode = "Phổ đơn lẻ"
+            selected_spectrum_idx = 0
+            if has_collection:
+                st.info(f"📊 Phân tích phổ: {selected_in_collection[0]['name']}")
+
         col1, col2 = st.columns(2)
 
         with col1:
@@ -1471,56 +1503,81 @@ elif page == "Phân tích":
                 from scipy.signal import find_peaks
 
                 with st.spinner("Đang tìm peaks..."):
-                    # Lấy phổ để phân tích
-                    data_type = type(data_to_analyze).__name__
+                    # Prepare results storage
+                    all_peaks_results = []
 
-                    if data_type == 'Spectrum':
-                        # Spectrum đơn lẻ
-                        spectrum = data_to_analyze
-                    elif hasattr(data_to_analyze, 'flat'):
-                        # Volumetric data
-                        spectrum = data_to_analyze.flat[0]
-                    elif hasattr(data_to_analyze, '__len__') and len(data_to_analyze.shape) > 1:
-                        # Multi-spectrum data
-                        spectrum = data_to_analyze[0]
+                    # Determine which spectra to analyze
+                    if has_collection:
+                        if peak_mode == "So sánh tất cả phổ":
+                            spectra_to_analyze = selected_in_collection
+                        else:
+                            spectra_to_analyze = [selected_in_collection[selected_spectrum_idx]]
                     else:
-                        spectrum = data_to_analyze
+                        # No collection, use single spectrum
+                        data_type = type(data_to_analyze).__name__
+                        if data_type == 'Spectrum':
+                            spectrum = data_to_analyze
+                        elif hasattr(data_to_analyze, 'flat'):
+                            spectrum = data_to_analyze.flat[0]
+                        elif hasattr(data_to_analyze, '__len__') and len(data_to_analyze.shape) > 1:
+                            spectrum = data_to_analyze[0]
+                        else:
+                            spectrum = data_to_analyze
 
-                    # Lấy intensities một cách an toàn
-                    if hasattr(spectrum, 'spectral_data'):
-                        intensities = spectrum.spectral_data
-                    elif hasattr(spectrum, 'flat'):
-                        intensities = spectrum.flat
-                    elif isinstance(spectrum, np.ndarray):
-                        intensities = spectrum
-                    else:
-                        # Fallback: chuyển về numpy array
-                        intensities = np.array(spectrum)
+                        spectra_to_analyze = [{'name': 'Phổ', 'data': spectrum}]
 
-                    # Đảm bảo là 1D array
-                    if len(intensities.shape) > 1:
-                        intensities = intensities.flatten()
+                    # Analyze each spectrum
+                    for item in spectra_to_analyze:
+                        spectrum = item['data']
+                        spectrum_name = item['name']
 
-                    # Tìm peaks
-                    peaks, properties = find_peaks(intensities, prominence=prominence, distance=distance)
+                        # Use preprocessed if available
+                        if 'preprocessed' in item and item['preprocessed'] is not None:
+                            spectrum = item['preprocessed']
 
-                    # Lấy spectral axis an toàn
-                    if hasattr(spectrum, 'spectral_axis'):
-                        spectral_axis = spectrum.spectral_axis
-                    else:
-                        # Nếu không có, tạo index array
-                        spectral_axis = np.arange(len(intensities))
+                        # Lấy intensities một cách an toàn
+                        if hasattr(spectrum, 'spectral_data'):
+                            intensities = spectrum.spectral_data
+                        elif hasattr(spectrum, 'flat'):
+                            intensities = spectrum.flat
+                        elif isinstance(spectrum, np.ndarray):
+                            intensities = spectrum
+                        else:
+                            intensities = np.array(spectrum)
+
+                        # Đảm bảo là 1D array
+                        if len(intensities.shape) > 1:
+                            intensities = intensities.flatten()
+
+                        # Tìm peaks
+                        peaks, properties = find_peaks(intensities, prominence=prominence, distance=distance)
+
+                        # Lấy spectral axis an toàn
+                        if hasattr(spectrum, 'spectral_axis'):
+                            spectral_axis = spectrum.spectral_axis
+                        else:
+                            spectral_axis = np.arange(len(intensities))
+
+                        all_peaks_results.append({
+                            'name': spectrum_name,
+                            'spectrum': spectrum,
+                            'peaks': peaks,
+                            'properties': properties,
+                            'intensities': intensities,
+                            'spectral_axis': spectral_axis
+                        })
 
                     st.session_state.analysis_results = {
                         'type': 'peaks',
-                        'spectrum': spectrum,
-                        'peaks': peaks,
-                        'properties': properties,
-                        'intensities': intensities,
-                        'spectral_axis': spectral_axis
+                        'all_peaks': all_peaks_results,
+                        'mode': peak_mode
                     }
 
-                    st.success(f"✅ Đã tìm thấy {len(peaks)} peaks!")
+                    total_peaks = sum(len(r['peaks']) for r in all_peaks_results)
+                    if peak_mode == "So sánh tất cả phổ":
+                        st.success(f"✅ Đã tìm thấy tổng cộng {total_peaks} peaks trong {len(all_peaks_results)} phổ!")
+                    else:
+                        st.success(f"✅ Đã tìm thấy {total_peaks} peaks!")
 
             except Exception as e:
                 st.error(f"❌ Lỗi khi tìm peaks: {str(e)}")
@@ -1657,46 +1714,128 @@ elif page == "Trực quan hóa":
     elif result_type == 'peaks':
         st.write("### Kết quả Peak Detection")
 
-        peaks = results['peaks']
-        intensities = results['intensities']
-        spectral_axis = results['spectral_axis']
+        all_peaks = results['all_peaks']
+        mode = results.get('mode', 'Phổ đơn lẻ')
 
-        fig, ax = plt.subplots(figsize=(12, 6), dpi=150)
+        # Single spectrum mode
+        if mode == "Phổ đơn lẻ" or len(all_peaks) == 1:
+            result = all_peaks[0]
+            peaks = result['peaks']
+            intensities = result['intensities']
+            spectral_axis = result['spectral_axis']
+            spectrum_name = result['name']
 
-        # Plot spectrum
-        ax.plot(spectral_axis, intensities, 'b-', linewidth=1.5, label='Spectrum')
-        ax.plot(spectral_axis[peaks], intensities[peaks], 'ro', markersize=8, label='Peaks')
+            fig, ax = plt.subplots(figsize=(12, 6), dpi=150)
 
-        # Đánh dấu peaks
-        for peak in peaks:
-            ax.axvline(spectral_axis[peak], color='r', linestyle='--', alpha=0.3)
-            ax.text(spectral_axis[peak], intensities[peak], f'{spectral_axis[peak]:.0f}',
-                   rotation=45, ha='right', va='bottom', fontsize=8)
+            # Plot spectrum with name in legend
+            ax.plot(spectral_axis, intensities, 'b-', linewidth=1.5, label=spectrum_name)
+            ax.plot(spectral_axis[peaks], intensities[peaks], 'ro', markersize=8, label=f'Peaks ({len(peaks)})')
 
-        ax.set_xlabel('Wavenumber (cm⁻¹)')
-        ax.set_ylabel('Intensity')
-        ax.set_title(f'Peak Detection - {len(peaks)} peaks found')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+            # Đánh dấu peaks
+            for peak in peaks:
+                ax.axvline(spectral_axis[peak], color='r', linestyle='--', alpha=0.3)
+                ax.text(spectral_axis[peak], intensities[peak], f'{spectral_axis[peak]:.0f}',
+                       rotation=45, ha='right', va='bottom', fontsize=8)
 
-        plot_with_download(fig, "peak_detection.png", "📥 Tải Peak Detection")
+            ax.set_xlabel('Wavenumber (cm⁻¹)')
+            ax.set_ylabel('Intensity')
+            ax.set_title(f'Peak Detection: {spectrum_name} - {len(peaks)} peaks')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
 
-        # Bảng thông tin peaks
-        st.write("#### 📋 Danh sách Peaks")
-        peak_data = {
-            'Peak #': range(1, len(peaks)+1),
-            'Position (index)': peaks,
-            'Wavenumber (cm⁻¹)': [f"{spectral_axis[p]:.2f}" for p in peaks],
-            'Intensity': [f"{intensities[p]:.4f}" for p in peaks]
-        }
+            plot_with_download(fig, f"peak_detection_{spectrum_name}.png", "📥 Tải Peak Detection")
 
-        import pandas as pd
-        df = pd.DataFrame(peak_data)
-        st.dataframe(df, use_container_width=True)
+            # Bảng thông tin peaks
+            st.write("#### 📋 Danh sách Peaks")
+            peak_data = {
+                'Peak #': range(1, len(peaks)+1),
+                'Position (index)': peaks,
+                'Wavenumber (cm⁻¹)': [f"{spectral_axis[p]:.2f}" for p in peaks],
+                'Intensity': [f"{intensities[p]:.4f}" for p in peaks]
+            }
 
-        # CSV Export for peak detection
-        st.markdown("---")
-        create_csv_download(df, "peak_detection.csv", "📥 Tải Peak Detection CSV")
+            import pandas as pd
+            df = pd.DataFrame(peak_data)
+            st.dataframe(df, use_container_width=True)
+
+            # CSV Export for peak detection
+            st.markdown("---")
+            create_csv_download(df, f"peak_detection_{spectrum_name}.csv", "📥 Tải Peak Detection CSV")
+
+        # Compare all spectra mode
+        else:
+            st.info(f"📊 So sánh peaks của {len(all_peaks)} phổ")
+
+            # Plot all spectra with peaks
+            fig, ax = plt.subplots(figsize=(14, 8), dpi=150)
+
+            # Color palette
+            colors = plt.cm.tab10(np.linspace(0, 1, len(all_peaks)))
+
+            for idx, result in enumerate(all_peaks):
+                peaks = result['peaks']
+                intensities = result['intensities']
+                spectral_axis = result['spectral_axis']
+                spectrum_name = result['name']
+                color = colors[idx]
+
+                # Plot spectrum
+                ax.plot(spectral_axis, intensities, '-', linewidth=1.5,
+                       color=color, label=f"{spectrum_name} ({len(peaks)} peaks)", alpha=0.7)
+
+                # Plot peaks
+                ax.plot(spectral_axis[peaks], intensities[peaks], 'o',
+                       markersize=6, color=color)
+
+            ax.set_xlabel('Wavenumber (cm⁻¹)')
+            ax.set_ylabel('Intensity')
+            ax.set_title(f'Peak Detection - So sánh {len(all_peaks)} phổ')
+            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            ax.grid(True, alpha=0.3)
+
+            plot_with_download(fig, "peak_detection_comparison.png", "📥 Tải Peak Comparison")
+
+            # Bảng thông tin tổng hợp
+            st.write("#### 📋 Tổng hợp Peaks")
+
+            # Create combined table
+            all_peak_data = []
+            for result in all_peaks:
+                spectrum_name = result['name']
+                peaks = result['peaks']
+                intensities = result['intensities']
+                spectral_axis = result['spectral_axis']
+
+                for i, peak in enumerate(peaks):
+                    all_peak_data.append({
+                        'Mẫu': spectrum_name,
+                        'Peak #': i+1,
+                        'Wavenumber (cm⁻¹)': f"{spectral_axis[peak]:.2f}",
+                        'Intensity': f"{intensities[peak]:.4f}"
+                    })
+
+            import pandas as pd
+            df_all = pd.DataFrame(all_peak_data)
+            st.dataframe(df_all, use_container_width=True)
+
+            # CSV Export
+            st.markdown("---")
+            create_csv_download(df_all, "peak_detection_all_spectra.csv", "📥 Tải tất cả Peaks CSV")
+
+            # Summary statistics
+            st.write("#### 📊 Thống kê")
+            col_stat1, col_stat2, col_stat3 = st.columns(3)
+
+            with col_stat1:
+                total_peaks = sum(len(r['peaks']) for r in all_peaks)
+                st.metric("Tổng số peaks", total_peaks)
+
+            with col_stat2:
+                avg_peaks = total_peaks / len(all_peaks)
+                st.metric("Trung bình peaks/phổ", f"{avg_peaks:.1f}")
+
+            with col_stat3:
+                st.metric("Số phổ", len(all_peaks))
 
     elif result_type == 'pca':
         st.write("### Kết quả PCA")
