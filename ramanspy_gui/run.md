@@ -1,0 +1,1 @@
+streamlit run ramanspy_gui.py
