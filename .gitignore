@@ -1,0 +1,12 @@
+only_me/
+
+# Build and dependencies
+node_modules/
+.next/
+__pycache__/
+venv/
+.env
+.DS_Store
+dist/
+build/
+*.pyc

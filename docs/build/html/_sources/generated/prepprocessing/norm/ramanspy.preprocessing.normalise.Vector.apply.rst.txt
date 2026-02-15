@@ -1,6 +1,0 @@
-ramanspy.preprocessing.normalise.Vector.apply
-=============================================
-
-.. currentmodule:: ramanspy.preprocessing.normalise
-
-.. automethod:: Vector.apply

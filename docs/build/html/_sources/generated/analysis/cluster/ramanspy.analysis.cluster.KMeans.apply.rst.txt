@@ -1,6 +1,0 @@
-ramanspy.analysis.cluster.KMeans.apply
-======================================
-
-.. currentmodule:: ramanspy.analysis.cluster
-
-.. automethod:: KMeans.apply

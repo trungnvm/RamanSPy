@@ -1,6 +1,0 @@
-ramanspy.preprocessing.baseline.IARPLS.apply
-============================================
-
-.. currentmodule:: ramanspy.preprocessing.baseline
-
-.. automethod:: IARPLS.apply

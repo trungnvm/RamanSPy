@@ -1,6 +1,0 @@
-ramanspy.preprocessing.denoise.Kernel.apply
-===========================================
-
-.. currentmodule:: ramanspy.preprocessing.denoise
-
-.. automethod:: Kernel.apply

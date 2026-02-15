@@ -1,6 +1,0 @@
-ramanspy.analysis.unmix.FIPPI.apply
-===================================
-
-.. currentmodule:: ramanspy.analysis.unmix
-
-.. automethod:: FIPPI.apply

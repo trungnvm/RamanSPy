@@ -1,6 +1,0 @@
-ramanspy.preprocessing.baseline.FABC.apply
-==========================================
-
-.. currentmodule:: ramanspy.preprocessing.baseline
-
-.. automethod:: FABC.apply

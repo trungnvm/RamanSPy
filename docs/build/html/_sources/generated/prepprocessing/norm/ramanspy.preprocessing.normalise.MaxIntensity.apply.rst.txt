@@ -1,6 +1,0 @@
-ramanspy.preprocessing.normalise.MaxIntensity.apply
-===================================================
-
-.. currentmodule:: ramanspy.preprocessing.normalise
-
-.. automethod:: MaxIntensity.apply

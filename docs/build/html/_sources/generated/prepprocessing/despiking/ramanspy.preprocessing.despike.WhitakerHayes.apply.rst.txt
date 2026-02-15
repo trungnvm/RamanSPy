@@ -1,6 +1,0 @@
-ramanspy.preprocessing.despike.WhitakerHayes.apply
-==================================================
-
-.. currentmodule:: ramanspy.preprocessing.despike
-
-.. automethod:: WhitakerHayes.apply

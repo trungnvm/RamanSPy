@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+ramanspy
+numpy
+pydantic
+scikit-learn
+matplotlib
+pandas
+requests
